@@ -5,6 +5,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { OptionValue, QuestionText, type ContentBlock } from "@/components/QuestionContentBlocks";
 import {
   getAssignmentByIdService,
   getSubmissionByIdService,
@@ -29,7 +30,8 @@ interface Question {
   description: string;
   marks: number;
   modelAnswer: string | null;
-  options: { id: string; value: string; isCorrect: boolean }[];
+  contentBlocks?: ContentBlock[] | null;
+  options: { id: string; value: string; isCorrect: boolean; isCode?: boolean }[];
 }
 
 interface Submission {
@@ -140,12 +142,12 @@ export default function GradeSubmissionPage() {
     }
   };
 
-  if (loading) return <div className="text-gray-400 text-center py-10">Loading submission...</div>;
-  if (!submission) return <div className="text-gray-400 text-center py-10">Submission not found</div>;
+  if (loading) return <div className="text-gray-400 text-center py-6 sm:py-8 md:py-10">Loading submission...</div>;
+  if (!submission) return <div className="text-gray-400 text-center py-6 sm:py-8 md:py-10">Submission not found</div>;
 
   if (submission.status === "in_progress") {
     return (
-      <div className="text-white text-center py-10">
+      <div className="text-white text-center py-6 sm:py-8 md:py-10">
         This student hasn't submitted the assignment yet — nothing to grade.
       </div>
     );
@@ -153,7 +155,7 @@ export default function GradeSubmissionPage() {
 
   if (submission.status === "evaluating") {
     return (
-      <div className="text-white text-center py-10 animate-pulse">
+      <div className="text-white text-center py-6 sm:py-8 md:py-10 animate-pulse">
         This submission is currently being evaluated by the AI grading engine. Please wait or refresh in a few moments.
       </div>
     );
@@ -168,7 +170,7 @@ export default function GradeSubmissionPage() {
         <ArrowLeft className="h-4 w-4" /> Back
       </button>
 
-      <div className="bg-[#0b0e14] border border-white/10 rounded-2xl p-8">
+      <div className="bg-[#0b0e14] border border-white/10 rounded-2xl p-5 sm:p-8">
         <div className="pb-6 mb-6 border-b border-white/10 text-center">
           <h2 className="text-2xl md:text-3xl font-bold text-white tracking-tight">{assignmentTitle || "Assignment"}</h2>
         </div>
@@ -199,9 +201,7 @@ export default function GradeSubmissionPage() {
             return (
               <div key={a.id}>
                 <div className="flex items-start justify-between gap-4 mb-3">
-                  <p className="text-white text-base font-medium leading-relaxed">
-                    <span className="font-bold">Q{idx + 1}:</span> {q.description}
-                  </p>
+                  <QuestionText label={`Q${idx + 1}:`} description={q.description} blocks={q.contentBlocks} className="text-white text-base font-medium leading-relaxed" />
                   <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-white/5 text-gray-300 border border-white/10 shrink-0 whitespace-nowrap">
                     {q.marks} marks
                   </span>
@@ -215,12 +215,12 @@ export default function GradeSubmissionPage() {
                         <div
                           key={o.id}
                           className={`text-sm px-3 py-1.5 rounded-lg flex items-center gap-1.5 ${
-                            o.isCorrect ? "bg-[#18181b]merald-500/15 text-emerald-200 border border-emerald-500/30" : selected ? "bg-red-500/10 text-red-400" : "text-white/70"
+                            o.isCorrect ? "bg-emerald-500/15 text-emerald-200 border border-emerald-500/30" : selected ? "bg-red-500/10 text-red-400" : "text-white/70"
                           }`}
                         >
                           {selected && <span className="font-bold">●</span>}
                           {o.isCorrect && <Check className="h-3.5 w-3.5" />}
-                          {o.value}
+                          <OptionValue value={o.value} isCode={o.isCode} size="compact" />
                         </div>
                       );
                     })}
@@ -243,7 +243,7 @@ export default function GradeSubmissionPage() {
                       max={q.marks}
                       value={marksByAnswer[a.id] ?? ""}
                       onChange={(e) => setMarksByAnswer((prev) => ({ ...prev, [a.id]: e.target.value }))}
-                      className="w-full bg-[#18181b] border border-white/10 rounded-lg px-3 py-2.5 text-white focus:outline-none focus:ring-1 focus:ring-white/30 transition-all text-sm"
+                      className="w-full py-2.5 text-white transition-all text-sm border-b transition-colors placeholder:text-zinc-500 rounded-none border-0 border-white/20 bg-transparent px-0 focus:border-orange-500 focus:outline-none focus:ring-0"
                     />
                   </div>
                   <div className="space-y-1">
@@ -253,7 +253,7 @@ export default function GradeSubmissionPage() {
                       value={feedbackByAnswer[a.id] ?? ""}
                       onChange={(e) => setFeedbackByAnswer((prev) => ({ ...prev, [a.id]: e.target.value }))}
                       placeholder="Feedback for this answer..."
-                      className="w-full bg-[#18181b] border border-white/10 rounded-lg px-3 py-2.5 text-white placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-white/30 transition-all text-sm"
+                      className="w-full py-2.5 text-white placeholder:text-gray-500 transition-all text-sm border-b transition-colors placeholder:text-zinc-500 rounded-none border-0 border-white/20 bg-transparent px-0 focus:border-orange-500 focus:outline-none focus:ring-0"
                     />
                   </div>
                 </div>
@@ -273,7 +273,7 @@ export default function GradeSubmissionPage() {
           </div>
 
           <div className="flex justify-end">
-            <Button size="lg" className="bg-[#18181b]merald-600 hover:bg-[#18181b]merald-700 text-white" onClick={handleSubmitGrade} disabled={saving}>
+            <Button size="lg" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleSubmitGrade} disabled={saving}>
               {saving ? "Saving..." : "Submit Grade"}
             </Button>
           </div>

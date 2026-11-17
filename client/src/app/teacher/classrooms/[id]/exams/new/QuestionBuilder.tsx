@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { ArrowLeft, Plus, Check, X, CheckCircle2, Circle, Zap, Sparkles, ChevronDown, ChevronUp, ArrowRight } from "lucide-react";
+import { ArrowLeft, ArrowUp, Plus, Check, X, CheckCircle2, Circle, Zap, Sparkles, ChevronDown, ChevronUp, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -12,9 +12,11 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import { normalizeCodeBlocks } from "@/lib/markdown";
-import { ContentBlocksView, OptionValue } from "@/components/QuestionContentBlocks";
+import { ContentBlocksView, OptionValue, MarkdownCode } from "@/components/QuestionContentBlocks";
 import { MATH_REMARK_PLUGINS, MATH_REHYPE_PLUGINS } from "@/lib/markdownMath";
 
+import { TopicsPanel } from "./TopicsPanel";
+import { ModePicker, type CreationMode } from "./workspace";
 import { BlueprintTreeViewer } from "@/components/BlueprintTreeViewer";
 import BlueprintRefinementChat from "@/components/BlueprintRefinementChat";
 import QuestionReviewChat from "@/components/QuestionReviewChat";
@@ -34,10 +36,12 @@ import {
   skipExamIntentQuestion,
   skipAllExamIntentQuestions,
   rebalanceBlueprint,
+  getExamIntentConversation,
 } from "@/services/generationAgents.service";
-import { useRealtimeVoiceAgent } from "@/hooks/useRealtimeVoiceAgent";
-import { useEntitlements } from "@/hooks/useEntitlements";
 import { buildSourceLookup, type BookToc } from "@/services/books.service";
+import { CopyButton } from "@/components/CopyButton";
+import { MicButton, ListeningIndicator } from "@/components/MicButton";
+import { useSpeechToText } from "@/hooks/useSpeechToText";
 import {
   buildExamInputFromConfig,
   sectionsToLegacyTree,
@@ -59,11 +63,15 @@ export function QuestionBuilder({
   examId,
   sectionsState,
   showReviewAgent = true,
+  onPickMode,
 }: {
   examId: string;
   // Lets a parent own the section list, e.g. to drive a review agent rendered outside this component.
   sectionsState?: { sections: any[]; setSections: (sections: any[]) => void };
   showReviewAgent?: boolean;
+  // When given, an exam with no questions offers every way of building them (AI, past papers, a book) and calls this
+  // with the one picked, instead of showing a single AI button.
+  onPickMode?: (mode: CreationMode) => void;
 }) {
   const [internalSections, setInternalSections] = useState<any[]>([]);
   const sections = sectionsState?.sections ?? internalSections;
@@ -159,7 +167,7 @@ export function QuestionBuilder({
     }
   };
 
-  if (loading) return <div className="text-white text-center py-10">Loading builder...</div>;
+  if (loading) return <div className="text-white text-center py-6 sm:py-8 md:py-10">Loading builder...</div>;
 
   return (
     <div className="space-y-6 relative h-full">
@@ -188,13 +196,17 @@ export function QuestionBuilder({
               placeholder="Enter section title..."
               value={newSectionTitle}
               onChange={e => setNewSectionTitle(e.target.value)}
-              className="bg-[#14151f] border border-white/15 text-white placeholder:text-zinc-400 h-10 flex-1 max-w-md"
+              className="text-white placeholder:text-zinc-400 h-10 flex-1 max-w-md"
               onKeyDown={(e) => e.key === "Enter" && handleSaveNewSection()}
             />
             <Button onClick={handleSaveNewSection} className="bg-green-600 hover:bg-green-700 text-white">Save Section</Button>
             <Button variant="ghost" onClick={() => setIsAddingSection(false)} className="text-gray-400 hover:text-white">Cancel</Button>
           </div>
         </Card>
+      ) : sections.length === 0 && onPickMode ? (
+        <div className="mx-auto w-full max-w-2xl py-8">
+          <ModePicker selected={null} onSelect={onPickMode} onManual={() => setIsAddingSection(true)} />
+        </div>
       ) : sections.length === 0 ? (
         <div className="max-w-2xl mx-auto py-12 space-y-6">
           <h4 className="text-center text-lg font-bold text-white tracking-wide">How would you like to add questions?</h4>
@@ -232,6 +244,9 @@ export function QuestionBuilder({
             {sections.map((section, idx) => (
               <SectionItem
                 key={section._id || section.id}
+                examId={examId}
+                canEditTopics={examDetail?.status !== "PUBLISHED"}
+                sourceDocumentIds={examDetail?.sourceDocumentIds ?? []}
                 section={section}
                 index={idx}
                 refresh={fetchSections}
@@ -247,7 +262,7 @@ export function QuestionBuilder({
           {/* Resizable Splitter */}
           {editorConfig.isOpen && editorConfig.sectionId && (
             <div
-              className="w-4 bg-transparent hover:bg-orange-500/20 active:bg-orange-500/40 cursor-col-resize shrink-0 transition-colors flex items-center justify-center group"
+              className="hidden md:flex w-4 bg-transparent hover:bg-orange-500/20 active:bg-orange-500/40 cursor-col-resize shrink-0 transition-colors items-center justify-center group"
               onMouseDown={() => setIsDraggingSidebar(true)}
             >
               <div className="w-0.5 h-full min-h-[500px] bg-white/10 group-hover:bg-blue-400 rounded-full transition-colors" />
@@ -257,8 +272,8 @@ export function QuestionBuilder({
           {/* Right Sidebar Editor */}
           {editorConfig.isOpen && editorConfig.sectionId && (
             <div
-              className="shrink-0 sticky top-0 bg-[#151a28] border border-orange-500/30 rounded-xl shadow-[0_0_40px_rgba(147,51,234,0.15)] flex flex-col animate-in slide-in-from-right-8 h-[calc(100vh-250px)] overflow-hidden"
-              style={{ width: `${sidebarWidth}px` }}
+              className="fixed inset-0 z-50 h-dvh w-full md:static md:z-auto md:h-[calc(100vh-250px)] md:w-[var(--editor-w)] md:shrink-0 md:sticky md:top-0 bg-[#151a28] md:border border-orange-500/30 md:rounded-xl shadow-[0_0_40px_rgba(147,51,234,0.15)] flex flex-col animate-in slide-in-from-right-8 overflow-hidden"
+              style={{ "--editor-w": `${sidebarWidth}px` } as React.CSSProperties}
             >
               <SidebarQuestionEditor
                 config={editorConfig}
@@ -273,13 +288,13 @@ export function QuestionBuilder({
         </div>
       )}
 
-      {/* Question Review Agent — voice-based editing of the real, saved
+      {/* Question Review Agent — chat-based editing of the real, saved
           questions, available as a floating panel on top of the normal
           exam view rather than a separate page. */}
       {showReviewAgent && !isAiMode && !isAddingSection && sections.length > 0 && (
         <>
           {showQuestionReview ? (
-            <div className="fixed bottom-6 right-6 z-50 w-[380px] h-[560px] shadow-2xl">
+            <div className="fixed bottom-3 right-3 sm:bottom-6 sm:right-6 z-50 w-[min(380px,calc(100vw-1.5rem))] h-[min(560px,calc(100dvh-1.5rem))] shadow-2xl">
               <QuestionReviewChat
                 examId={examId}
                 onSectionsChange={setSections}
@@ -312,7 +327,7 @@ export function QuestionBuilder({
 // -------------------------------------------------------------
 // SECTION COMPONENT
 // -------------------------------------------------------------
-function SectionItem({ section, index, refresh, onOpenEditor, onOpenAiForSection }: { section: any, index: number, refresh: () => void, onOpenEditor: (q: any) => void, onOpenAiForSection?: (secId: string) => void }) {
+function SectionItem({ examId, canEditTopics, sourceDocumentIds, section, index, refresh, onOpenEditor, onOpenAiForSection }: { examId: string, canEditTopics: boolean, sourceDocumentIds: string[], section: any, index: number, refresh: () => void, onOpenEditor: (q: any) => void, onOpenAiForSection?: (secId: string) => void }) {
   const [isEditing, setIsEditing] = useState(false);
   const [isExpanded, setIsExpanded] = useState(true);
   const [title, setTitle] = useState(section.title || "");
@@ -367,7 +382,7 @@ function SectionItem({ section, index, refresh, onOpenEditor, onOpenAiForSection
 
   return (
     <Card className="bg-[#0f0f11]/80 border-white/10 shadow-xl overflow-hidden transition-all duration-300">
-      <div className="bg-[#18181b] px-6 py-4 flex items-center justify-between border-b border-white/5">
+      <div className="bg-[#18181b] px-3 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-2 border-b border-white/5">
         <div className="flex-1 flex items-center gap-4">
           <Button 
             variant="ghost" 
@@ -380,7 +395,7 @@ function SectionItem({ section, index, refresh, onOpenEditor, onOpenAiForSection
           <span className="text-orange-400 font-bold bg-orange-500/10 px-2.5 py-1 rounded">S{index + 1}</span>
           {isEditing ? (
             <div className="flex items-center gap-2 w-full max-w-sm">
-              <Input autoFocus value={title} onChange={e => setTitle(e.target.value)} className="bg-[#14151f] border border-white/15 text-white placeholder:text-zinc-400 h-9" onKeyDown={(e) => e.key === "Enter" && handleUpdate()} />
+              <Input autoFocus value={title} onChange={e => setTitle(e.target.value)} className="text-white placeholder:text-zinc-400 h-9" onKeyDown={(e) => e.key === "Enter" && handleUpdate()} />
               <Button size="icon" variant="ghost" onClick={handleUpdate} className="text-green-400 hover:text-green-300 hover:bg-green-400/10 h-9 w-9"><Check className="h-4 w-4" /></Button>
               <Button size="icon" variant="ghost" onClick={() => setIsEditing(false)} className="text-red-400 hover:text-red-300 hover:bg-red-400/10 h-9 w-9"><X className="h-4 w-4" /></Button>
             </div>
@@ -401,7 +416,8 @@ function SectionItem({ section, index, refresh, onOpenEditor, onOpenAiForSection
       </div>
 
       {isExpanded && (
-        <CardContent className="p-6 space-y-4 animate-in slide-in-from-top-2 fade-in duration-200">
+        <CardContent className="p-2 sm:p-6 space-y-3 sm:space-y-4 animate-in slide-in-from-top-2 fade-in duration-200">
+          <TopicsPanel examId={examId} section={section} canEdit={canEditTopics} refresh={refresh} sourceDocumentIds={sourceDocumentIds} />
           {(section.questions || []).map((q: any, qIdx: number) => (
             <QuestionItem key={q._id || q.id} question={q} index={qIdx} refresh={refresh} onEdit={() => onOpenEditor(q)} />
           ))}
@@ -452,7 +468,7 @@ function QuestionItem({ question, index, refresh, onEdit }: { question: any, ind
   };
 
   return (
-    <div className="bg-[#18181b]/60 border border-white/5 rounded-2xl p-6 relative overflow-hidden shadow-sm hover:shadow-md hover:border-white/10 transition-all group">
+    <div className="bg-[#18181b]/60 border border-white/5 rounded-xl sm:rounded-2xl p-3 sm:p-6 relative overflow-hidden shadow-sm hover:shadow-md hover:border-white/10 transition-all group">
       <div className="absolute top-0 left-0 bg-orange-500/10 text-orange-400 font-mono text-xs font-bold px-3 py-1.5 rounded-br-xl border-b border-r border-orange-500/30">
         Q{index + 1}
       </div>
@@ -470,40 +486,34 @@ function QuestionItem({ question, index, refresh, onEdit }: { question: any, ind
         <div className="flex items-center gap-2 mb-4">
           <span className={cn(
             "px-2.5 py-1 rounded-md text-[10px] uppercase font-bold tracking-wider",
-            question.type === 'mcq' ? "bg-orange-500/10 text-orange-400 border border-orange-500/30" : "bg-[#18181b]mber-500/10 text-amber-400 border border-amber-500/20"
+            question.type === 'mcq' ? "bg-orange-500/10 text-orange-400 border border-orange-500/30" : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
           )}>
             {question.type === 'mcq' ? 'Multiple Choice' : 'Descriptive'}
           </span>
           <span className="border border-white/10 bg-white/5 px-2.5 py-1 rounded-md text-gray-300 text-[10px] font-bold">Marks: {question.marks || 1}</span>
+          {question.topic && (
+            <span className="min-w-0 truncate text-[11px] text-gray-500">
+              {question.topic}
+              {question.subtopic ? ` › ${question.subtopic}` : ""}
+            </span>
+          )}
         </div>
 
-        <div className="text-white text-[15px] leading-relaxed mb-6 font-medium prose prose-invert max-w-none pr-16">
+        <div className="text-white text-[15px] leading-relaxed mb-4 sm:mb-6 font-medium prose prose-invert max-w-none pr-16">
           <ReactMarkdown 
             remarkPlugins={MATH_REMARK_PLUGINS}
             rehypePlugins={MATH_REHYPE_PLUGINS}
             components={{
                 pre: ({ children }) => {
-                  const lang = String(((children as any)?.props?.className) || "").replace("language-", "") || "code";
                   return (
-                    <div className="my-5 rounded-xl overflow-hidden border border-white/10 bg-[#09090b] shadow-2xl">
-                      <div className="bg-white/5 px-4 py-2.5 border-b border-white/5 flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-[#ff5f56]" />
-                        <div className="w-3 h-3 rounded-full bg-[#ffbd2e]" />
-                        <div className="w-3 h-3 rounded-full bg-[#27c93f]" />
-                        <span className="ml-3 text-xs font-mono text-gray-500 tracking-wider uppercase">{lang}</span>
-                      </div>
+                    <div className="my-5 rounded-xl overflow-hidden border border-white/10 bg-[#09090b] keep-dark shadow-2xl">
                       <div className="p-5 overflow-x-auto custom-scrollbar font-normal">
                         {children}
                       </div>
                     </div>
                   );
                 },
-                code: ({ className, children, ...props }) => {
-                  const isInline = !(className?.includes("language-") || String(children ?? "").includes("\n"));
-                  return isInline
-                    ? <code className="bg-orange-500/10 px-1.5 py-0.5 rounded text-[13px] text-orange-300 font-mono border border-orange-500/30" {...props}>{children}</code>
-                    : <code className={"block font-mono text-[13px] leading-relaxed text-gray-300 whitespace-pre-wrap" + (className ? " " + className : "")} {...props}>{children}</code>;
-                },
+                code: ({ className, children }) => <MarkdownCode className={className} size="compact">{children}</MarkdownCode>,
                 p: ({...props}) => <p className="mb-2 last:mb-0" {...props} />
               }}
           >
@@ -511,7 +521,7 @@ function QuestionItem({ question, index, refresh, onEdit }: { question: any, ind
           </ReactMarkdown>
         </div>
 
-        <div className="max-w-3xl -mt-3 mb-5">
+        <div className="max-w-3xl -mt-3 mb-1 sm:mb-5">
           <ContentBlocksView blocks={question.contentBlocks} size="compact" />
         </div>
 
@@ -526,12 +536,12 @@ function QuestionItem({ question, index, refresh, onEdit }: { question: any, ind
           <div className="space-y-2.5 max-w-3xl">
             {question.options.map((opt: any) => (
               <div key={opt._id || opt.id} className={cn(
-                "flex items-center p-3.5 rounded-xl border text-[14px] transition-all duration-200",
-                opt.isCorrect 
-                  ? "bg-green-500/10 border-green-500/30 text-green-300 shadow-[inset_0_0_20px_rgba(34,197,94,0.05)]"
-                  : "bg-[#0f0f11] border-white/5 text-gray-400 hover:bg-white/5 hover:border-white/10"
+                "flex items-center p-3.5 rounded-xl border border-white/5 bg-[#0f0f11] text-[14px] transition-all duration-200 hover:bg-white/5 hover:border-white/10",
+                opt.isCorrect ? "text-white" : "text-gray-400"
               )}>
-                {opt.isCorrect ? <CheckCircle2 className="h-4 w-4 mr-3.5 shrink-0 text-green-400" /> : <div className="h-4 w-4 rounded-full border-2 border-gray-600 mr-3.5 shrink-0" />}
+                {opt.isCorrect
+                  ? <span className="mr-3.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-green-500"><Check className="h-3 w-3 text-white" strokeWidth={3.5} /></span>
+                  : <div className="mr-3.5 h-5 w-5 shrink-0 rounded-full border-2 border-gray-600" />}
                 <span className="font-medium"><OptionValue value={opt.value} isCode={opt.isCode} size="compact" /></span>
               </div>
             ))}
@@ -680,19 +690,19 @@ function SidebarQuestionEditor({ config, onClose, onSaveAndAnother, refresh, exa
 
   return (
     <div className="flex flex-col h-full">
-      <div className="px-6 py-5 border-b border-white/5 flex items-center justify-between bg-[#18181b]">
+      <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-white/5 flex items-center justify-between bg-[#18181b]">
         <h3 className="font-bold text-white text-lg">{isEditMode ? "Edit Question" : "New Question"}</h3>
         <Button size="icon" variant="ghost" onClick={onClose} className="text-gray-400 hover:text-white h-8 w-8">
           <X className="h-5 w-5" />
         </Button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 sm:space-y-6 custom-scrollbar">
         {!isEditMode && (
           <div className="space-y-2">
             <label className="text-sm font-semibold text-gray-300">Question Type</label>
             <Select value={type} onValueChange={(val: any) => setType(val)}>
-              <SelectTrigger className="w-full bg-[#050505] border-white/10 text-white h-11">
+              <SelectTrigger className="w-full text-white h-11">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="bg-[#0f0f11] border-white/10 text-white">
@@ -710,7 +720,7 @@ function SidebarQuestionEditor({ config, onClose, onSaveAndAnother, refresh, exa
             step="0.5"
             value={marks}
             onChange={e => setMarks(e.target.value)}
-            className="w-full bg-[#050505] border-white/10 text-white h-11"
+            className="w-full text-white h-11"
           />
         </div>
 
@@ -794,7 +804,7 @@ function SidebarQuestionEditor({ config, onClose, onSaveAndAnother, refresh, exa
                       setOptions(newOpts);
                     }}
                     placeholder={`Option ${i + 1}`}
-                    className="bg-transparent border-none text-white h-8 shadow-none focus-visible:ring-0 p-0 text-sm"
+                    className="text-white h-8 shadow-none p-0 text-sm"
                   />
                   {options.length > 2 && (
                     <Button size="icon" variant="ghost" onClick={() => setOptions(options.filter((_, idx) => idx !== i))} className="h-7 w-7 text-gray-500 hover:text-red-400 shrink-0">
@@ -832,7 +842,41 @@ function SidebarQuestionEditor({ config, onClose, onSaveAndAnother, refresh, exa
 // -------------------------------------------------------------
 export type AiGeneratorStage = "config" | "intent" | "blueprint" | "generating";
 
-export type WorkspaceParts = { left: React.ReactNode; right: React.ReactNode; footer: React.ReactNode };
+export type WorkspaceParts = { left: React.ReactNode; right: React.ReactNode; footer: React.ReactNode; fill?: boolean; bare?: boolean };
+
+// The Exam Intent conversation lives on the server, but this page only knows its id in memory. Keeping the id (and the
+// topics form it belongs to) in this tab's session storage lets a refresh pick the same conversation up again.
+type IntentSnapshot = {
+  sessionId: string;
+  inputKey: string;
+  sections: any[];
+  difficulty: Difficulty;
+  mapping: SectionBlockMapEntry[];
+  title: string;
+};
+const intentSnapshotKey = (examId: string) => `ai-exam-intent:${examId}`;
+const readIntentSnapshot = (examId: string): IntentSnapshot | null => {
+  try {
+    const raw = sessionStorage.getItem(intentSnapshotKey(examId));
+    return raw ? (JSON.parse(raw) as IntentSnapshot) : null;
+  } catch {
+    return null;
+  }
+};
+const writeIntentSnapshot = (examId: string, snapshot: IntentSnapshot) => {
+  try {
+    sessionStorage.setItem(intentSnapshotKey(examId), JSON.stringify(snapshot));
+  } catch {
+    // Storage can be blocked; the conversation just won't survive a refresh.
+  }
+};
+const clearIntentSnapshot = (examId: string) => {
+  try {
+    sessionStorage.removeItem(intentSnapshotKey(examId));
+  } catch {
+    // nothing to clean up
+  }
+};
 
 export function AiExamGeneratorForm({
   examId,
@@ -866,17 +910,30 @@ export function AiExamGeneratorForm({
   const [genPhase, setGenPhase] = useState<"blueprint" | "questions">("blueprint");
   const [genProgress, setGenProgress] = useState<{ done: number; total: number; message?: string } | null>(null);
 
-  // 4-Stage Workflow States: config form -> spoken intent conversation ->
-  // interactive blueprint tree -> question generation, which saves
+  // 4-Stage Workflow States: config form -> intent conversation (typed or
+  // dictated) -> interactive blueprint tree -> question generation, which saves
   // immediately and hands off to the real exam view (the Question Review
   // Agent lives there, not in this AI flow — see QuestionBuilder below).
-  const { entitlements } = useEntitlements();
-  // Text-chat counterpart of the voice intent conversation, used when the
-  // organisation's plan has no voice agent.
   const [intentHistory, setIntentHistory] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
   const [intentReply, setIntentReply] = useState("");
   const [isIntentThinking, setIsIntentThinking] = useState(false);
+  // The agent's question as it is being written; replaced by the finished message once the turn ends.
+  const [intentStreaming, setIntentStreaming] = useState("");
+  const intentStream = {
+    onText: (delta: string) => setIntentStreaming((prev) => prev + delta),
+    onReset: () => setIntentStreaming(""),
+  };
+  // Dictation: spoken words are added to what's already in the box and are never sent on their own.
+  // Hold Space (anywhere on the page while the box is empty) or click the mic.
+  const stt = useSpeechToText({
+    onText: (t) => setIntentReply((prev) => (prev.trim() ? `${prev.trimEnd()} ` : "") + t),
+    boxIsEmpty: !intentReply.trim(),
+    enabled: !isIntentThinking,
+    globalSpace: true,
+  });
   const [aiStage, setAiStage] = useState<"config" | "intent" | "blueprint">("config");
+  // The refinement chat is a full view of its own, opened from the plan, instead of a panel beside it.
+  const [showRefine, setShowRefine] = useState(false);
   const [difficulty, setDifficulty] = useState<Difficulty>("medium");
   const [blueprint, setBlueprint] = useState<LegacyBlueprintTree | null>(null);
   // Sections whose plan total differs from the count set on the form, shown in the dialog before generating.
@@ -884,32 +941,21 @@ export function AiExamGeneratorForm({
   const [isRebalancing, setIsRebalancing] = useState(false);
 
   // generation_agents backend session powering this exam end to end — created
-  // by the Exam Intent Agent voice call below, then reused by blueprint
+  // by the Exam Intent Agent conversation below, then reused by blueprint
   // generation, the refinement chat, and question generation.
   const [sessionId, setSessionId] = useState<string | null>(null);
-  // Refs (not state) so the voice hook's tool-result callback — captured once
-  // when the WebRTC data channel opens — always reads the current value
+  // Refs (not state) so callbacks created once always read the current value
   // instead of whatever was in scope at that moment.
   const sessionIdRef = useRef<string | null>(null);
   const mappingRef = useRef<SectionBlockMapEntry[]>([]);
   const examTitleRef = useRef<string>("Untitled Exam");
+  // The topics the current conversation was started with; the same topics later mean "carry on with it".
+  const intentKeyRef = useRef<string | null>(null);
 
-  // "Latest callback" ref — proceedToBlueprintGeneration is defined further
-  // down (it needs state setters declared below), but the voice hook is
-  // created here and its tool-result handler is captured once when the
-  // WebRTC data channel opens. Calling through this ref (updated on every
-  // render, just below the real function's definition) means that handler
-  // always invokes the current version instead of a stale one.
+  // "Latest callback" ref — proceedToBlueprintGeneration is defined further down (it needs state setters declared below),
+  // but the conversation handlers above it need to call it. Calling through this ref (updated on every render, just below
+  // the real function's definition) means they always invoke the current version instead of a stale one.
   const proceedToBlueprintGenerationRef = useRef<() => Promise<void>>(async () => {});
-
-  const intentVoice = useRealtimeVoiceAgent({
-    agent: "intent",
-    onToolResult: (name) => {
-      if (name === "save_exam_intent_summary") {
-        void proceedToBlueprintGenerationRef.current();
-      }
-    },
-  });
 
   // A "section" here maps 1:1 onto a generation_agents pipeline section
   // (subject + question type + count + topics) — there's no separate
@@ -1009,49 +1055,36 @@ export function AiExamGeneratorForm({
     mappingRef.current = mapping;
     examTitleRef.current = title;
 
-    // Without the voice agent there is no spoken intent step, so the session
-    // is created headlessly from the config form and the flow goes straight
-    // to blueprint planning — the teacher still gets the whole pipeline,
-    // minus the conversation their plan doesn't include.
-    // Same Exam Intent Agent either way — the plan only decides whether the
-    // teacher talks to it or types to it. The conversation itself, and
-    // everything downstream of it, is identical.
-    if (!entitlements.voiceAgent) {
-      setAiStage("intent");
-      setIsIntentThinking(true);
-      try {
-        const result = await startExamIntentConversation(examInput);
-        sessionIdRef.current = result.sessionId;
-        setSessionId(result.sessionId);
-        setIntentHistory([{ role: "assistant", content: result.message }]);
-        if (result.done) void proceedToBlueprintGenerationRef.current();
-      } catch (err: any) {
-        toast.error(err?.response?.data?.message || err?.message || "Failed to start the exam intent conversation");
-        setAiStage("config");
-      } finally {
-        setIsIntentThinking(false);
-      }
+    // The session is created from the config form, and the Exam Intent Agent starts the conversation.
+    const inputKey = JSON.stringify(examInput);
+    // Same topics as the conversation already under way: carry on with it (or its plan) instead of starting over.
+    if (sessionIdRef.current && intentKeyRef.current === inputKey) {
+      setAiStage(blueprint ? "blueprint" : "intent");
       return;
     }
-
     setAiStage("intent");
+    setIsIntentThinking(true);
+    setBlueprint(null);
+    setIntentReply("");
     try {
-      const newSessionId = await intentVoice.start({ examInput });
-      sessionIdRef.current = newSessionId;
-      setSessionId(newSessionId);
-    } catch {
-      toast.error(intentVoice.error || "Failed to start the exam intent conversation");
+      const result = await startExamIntentConversation(examInput, intentStream);
+      sessionIdRef.current = result.sessionId;
+      setSessionId(result.sessionId);
+      intentKeyRef.current = inputKey;
+      writeIntentSnapshot(examId, { sessionId: result.sessionId, inputKey, sections, difficulty, mapping, title });
+      setIntentHistory([{ role: "assistant", content: result.message }]);
+      if (result.done) void proceedToBlueprintGenerationRef.current();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err?.message || "Failed to start the exam intent conversation");
       setAiStage("config");
+    } finally {
+      setIsIntentThinking(false);
+      setIntentStreaming("");
     }
   };
 
-  // Step 2: once the Exam Intent Agent calls save_exam_intent_summary (voice
-  // hook's onToolResult, wired above via proceedToBlueprintGenerationRef),
-  // the session already has a real summary — trigger blueprint generation
-  // exactly as before, just without the headless quick-start step.
-  // Chat equivalent of a spoken turn. The voice agent signals completion via
-  // its save_exam_intent_summary tool; in chat the same signal arrives as
-  // `done` on the turn result, and both lead to the identical next step.
+  // Step 2: the teacher answers (typed or dictated). When the agent has what it needs, the turn result comes back with
+  // `done`, and the flow moves on to blueprint generation.
   const sendIntentReply = async () => {
     const sid = sessionIdRef.current;
     const outgoing = intentReply.trim();
@@ -1061,13 +1094,14 @@ export function AiExamGeneratorForm({
     setIntentReply("");
     setIsIntentThinking(true);
     try {
-      const result = await continueExamIntentConversation(sid, outgoing);
+      const result = await continueExamIntentConversation(sid, outgoing, intentStream);
       setIntentHistory((prev) => [...prev, { role: "assistant", content: result.message }]);
       if (result.done) void proceedToBlueprintGenerationRef.current();
     } catch (err: any) {
       toast.error(err?.response?.data?.message || err?.message || "Conversation turn failed");
     } finally {
       setIsIntentThinking(false);
+      setIntentStreaming("");
     }
   };
 
@@ -1081,13 +1115,14 @@ export function AiExamGeneratorForm({
     setIntentHistory((prev) => [...prev, { role: "user", content: "(Skipped this question)" }]);
     setIsIntentThinking(true);
     try {
-      const result = await skipExamIntentQuestion(sid);
+      const result = await skipExamIntentQuestion(sid, intentStream);
       setIntentHistory((prev) => [...prev, { role: "assistant", content: result.message }]);
       if (result.done) void proceedToBlueprintGenerationRef.current();
     } catch (err: any) {
       toast.error(err?.response?.data?.message || err?.message || "Could not skip this question");
     } finally {
       setIsIntentThinking(false);
+      setIntentStreaming("");
     }
   };
 
@@ -1100,7 +1135,7 @@ export function AiExamGeneratorForm({
     setIntentHistory((prev) => [...prev, { role: "user", content: "(Skipped all remaining questions)" }]);
     setIsIntentThinking(true);
     try {
-      const result = await skipAllExamIntentQuestions(sid);
+      const result = await skipAllExamIntentQuestions(sid, intentStream);
       setIntentHistory((prev) => [...prev, { role: "assistant", content: result.message }]);
       // Always true from this endpoint, but keep the same guard as every
       // other completion path rather than assuming.
@@ -1109,13 +1144,13 @@ export function AiExamGeneratorForm({
       toast.error(err?.response?.data?.message || err?.message || "Could not skip the remaining questions");
     } finally {
       setIsIntentThinking(false);
+      setIntentStreaming("");
     }
   };
 
   const proceedToBlueprintGeneration = async () => {
     const sid = sessionIdRef.current;
     if (!sid) return;
-    intentVoice.stop();
 
     setIsGenerating(true);
     setGenPhase("blueprint");
@@ -1148,6 +1183,47 @@ export function AiExamGeneratorForm({
     }
   };
   proceedToBlueprintGenerationRef.current = proceedToBlueprintGeneration;
+
+  // After a page refresh the form, the chat and the plan are gone from memory, but the conversation is saved on the
+  // server. Read it back and put the teacher where they were.
+  useEffect(() => {
+    const saved = readIntentSnapshot(examId);
+    if (!saved) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const convo = await getExamIntentConversation(saved.sessionId);
+        if (cancelled) return;
+        const planReady = convo.blueprintStatus === "completed" && !!convo.blueprint;
+        const talking = convo.status === "in_progress" && convo.history.length > 0;
+        if (!talking && !planReady) {
+          clearIntentSnapshot(examId);
+          return;
+        }
+        setSections(saved.sections);
+        setDifficulty(saved.difficulty);
+        mappingRef.current = saved.mapping;
+        examTitleRef.current = saved.title;
+        sessionIdRef.current = saved.sessionId;
+        setSessionId(saved.sessionId);
+        intentKeyRef.current = saved.inputKey;
+        setIntentHistory(convo.history);
+        if (planReady && convo.blueprint) {
+          setBlueprint(sectionsToLegacyTree(convo.blueprint.sections, saved.mapping, saved.title, []));
+          setAiStage("blueprint");
+        } else {
+          setAiStage("intent");
+        }
+      } catch {
+        // The conversation is gone (deleted or not yours): start fresh.
+        clearIntentSnapshot(examId);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [examId]);
 
   // Review edits change counts freely, so before generating, check each section's
   // total against the count set on the form and let the teacher decide.
@@ -1237,6 +1313,7 @@ export function AiExamGeneratorForm({
       });
 
       toast.success("Questions generated successfully!");
+      clearIntentSnapshot(examId);
       onSuccess();
     } catch (err: any) {
       toast.error(err.response?.data?.message || err.message || "Failed to generate questions");
@@ -1284,7 +1361,43 @@ export function AiExamGeneratorForm({
     );
   }
 
-  const blueprintTreeNode = blueprint ? <BlueprintTreeViewer blueprint={blueprint} onChange={setBlueprint} sourceLookup={sourceLookup} /> : null;
+  // A section in the plan lines up with entries in the section/block table by position, so renaming or deleting one
+  // has to change the table too. A section's first entry is the number of blocks before it.
+  const sectionEntryRange = (sIdx: number) => {
+    const sections = blueprint?.sections ?? [];
+    const start = sections.slice(0, sIdx).reduce((n, s) => n + s.blocks.length, 0);
+    return [start, start + (sections[sIdx]?.blocks.length ?? 0)] as const;
+  };
+
+  const rememberMapping = () => {
+    const saved = readIntentSnapshot(examId);
+    if (saved) writeIntentSnapshot(examId, { ...saved, mapping: mappingRef.current });
+  };
+
+  const renameBlueprintSection = (sIdx: number, name: string) => {
+    const [from, to] = sectionEntryRange(sIdx);
+    mappingRef.current = mappingRef.current.map((m, i) => (i >= from && i < to ? { ...m, sectionName: name } : m));
+    setBlueprint((prev) => (prev ? { ...prev, sections: prev.sections.map((s, i) => (i === sIdx ? { ...s, name } : s)) } : prev));
+    rememberMapping();
+  };
+
+  const deleteBlueprintSection = (sIdx: number) => {
+    const [from, to] = sectionEntryRange(sIdx);
+    mappingRef.current = mappingRef.current.filter((_, i) => i < from || i >= to);
+    setBlueprint((prev) => (prev ? { ...prev, sections: prev.sections.filter((_, i) => i !== sIdx) } : prev));
+    rememberMapping();
+  };
+
+  const blueprintTreeNode = blueprint ? (
+    <BlueprintTreeViewer
+      blueprint={blueprint}
+      onChange={setBlueprint}
+      sourceLookup={sourceLookup}
+      onRefine={() => setShowRefine(true)}
+      onRenameSection={renameBlueprintSection}
+      onDeleteSection={deleteBlueprintSection}
+    />
+  ) : null;
 
   const refinementChatNode = blueprint && sessionId ? (
     <BlueprintRefinementChat
@@ -1298,21 +1411,31 @@ export function AiExamGeneratorForm({
     />
   ) : null;
 
+  const refineActions = (
+    <Button
+      variant="ghost"
+      onClick={() => setShowRefine(false)}
+      className="text-gray-400 hover:text-white h-10 px-5 text-sm font-semibold flex items-center gap-1.5"
+    >
+      <ArrowLeft className="h-4 w-4" /> Back to plan
+    </Button>
+  );
+
   const blueprintActions = (
     <>
       <Button
         variant="ghost"
         onClick={() => setAiStage("config")}
-        className="text-gray-400 hover:text-white h-10 px-5 text-sm font-semibold flex items-center gap-1.5"
+        className="text-gray-400 hover:text-white h-10 px-2 sm:px-5 text-sm font-semibold flex items-center gap-1.5"
       >
         <ArrowLeft className="h-4 w-4" /> {renderShell ? "Back to Topics" : "Edit Exam Settings"}
       </Button>
 
       <Button
         onClick={handleVerifyAndProceed}
-        className="bg-purple-600 hover:bg-purple-700 text-white h-11 px-7 font-bold text-sm shadow-xl shadow-purple-950/40 rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98]"
+        className="bg-purple-600 hover:bg-purple-700 text-white h-10 sm:h-11 px-4 sm:px-7 font-bold text-sm shadow-xl shadow-purple-950/40 rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98]"
       >
-        <Sparkles className="h-4 w-4 mr-2 text-purple-200" /> Generate Questions
+        <Sparkles className="h-4 w-4 mr-1.5 sm:mr-2 text-purple-200" /> Generate Questions
       </Button>
 
       <Dialog open={countMismatches !== null} onOpenChange={(open) => !open && !isRebalancing && setCountMismatches(null)}>
@@ -1355,7 +1478,7 @@ export function AiExamGeneratorForm({
       <Button variant="ghost" onClick={onBack} className="text-gray-400 hover:text-white h-10 px-5 text-sm font-semibold flex items-center gap-1.5">
         <ArrowLeft className="h-4 w-4" /> {renderShell ? "Previous" : "Cancel"}
       </Button>
-      <Button onClick={startIntentConversation} className="bg-purple-600 hover:bg-purple-700 text-white h-11 px-8 font-bold text-sm shadow-xl shadow-purple-950/40 rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98]">
+      <Button onClick={startIntentConversation} className="bg-purple-600 hover:bg-purple-700 text-white h-11 px-4 sm:px-6 md:px-8 font-bold text-sm shadow-xl shadow-purple-950/40 rounded-xl transition-all hover:scale-[1.02] active:scale-[0.98]">
         Next <ArrowRight className="h-4 w-4 ml-2" />
       </Button>
     </>
@@ -1364,10 +1487,7 @@ export function AiExamGeneratorForm({
   const intentActions = (
     <Button
       variant="ghost"
-      onClick={() => {
-        intentVoice.stop();
-        setAiStage("config");
-      }}
+      onClick={() => setAiStage("config")}
       className="text-gray-400 hover:text-white h-10 px-5 text-sm font-semibold flex items-center gap-1.5"
     >
       <ArrowLeft className="h-4 w-4" /> {renderShell ? "Back to Topics" : "Cancel"}
@@ -1375,170 +1495,113 @@ export function AiExamGeneratorForm({
   );
 
   // Read-only recap shown next to the intent conversation, so the teacher can see what the agent is planning from.
-  const configRecapNode = (
-    <div className="space-y-4">
-      <div>
-        <h5 className="font-bold text-white text-base tracking-wide">Your sections</h5>
-        <p className="text-xs text-gray-400">
-          Answer the agent in the panel on the right. Once it has enough, the subtopic plan appears here.
-        </p>
-      </div>
-      {sections.map((s) => (
-        <div key={s.id} className="bg-[#0f0f11] border border-white/10 rounded-xl p-4 space-y-2">
-          <div className="flex items-center justify-between gap-3">
-            <span className="font-bold text-white text-sm">{s.name}</span>
-            <span className="text-[11px] text-gray-400 uppercase tracking-wider">
-              {s.questionType === "mcq" ? "MCQ" : "Descriptive"} · {s.numberOfQuestions} Q · {s.marksPerQuestion} mark(s) each
-            </span>
-          </div>
-          <p className="text-xs text-gray-300">{s.subject}</p>
-          <div className="flex flex-wrap gap-1.5">
-            {s.topics.filter((t: string) => t.trim() !== "").map((t: string) => (
-              <span key={t} className="text-[11px] px-2 py-0.5 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-200">
-                {t}
-              </span>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-
   const intentChatNode = (
-        <div className={cn("bg-[#0f0f11] border border-white/10 rounded-2xl space-y-4", renderShell ? "p-4" : "p-6 max-w-xl mx-auto")}>
+        <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-5">
           <div className="flex items-center justify-between">
             <h5 className="font-bold text-white text-base tracking-wider uppercase flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-orange-500" /> Exam Intent Agent
             </h5>
-            {entitlements.voiceAgent && (
-              <span
-                className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${
-                  intentVoice.status === "connected"
-                    ? "bg-green-500/10 text-green-400"
-                    : intentVoice.status === "connecting"
-                    ? "bg-orange-500/10 text-orange-300"
-                    : "bg-red-500/10 text-red-400"
-                }`}
-              >
-                {intentVoice.status === "connected" ? "Live" : intentVoice.status}
-              </span>
-            )}
           </div>
           <p className="text-xs text-gray-400">
-            {entitlements.voiceAgent ? "Talk through" : "Tell the agent"} your preferences — question style, topic
-            emphasis, sample questions — it will ask one thing at a time and move on once it has enough to plan the
-            exam.
+            Tell the agent the goal of this exam and what you expect from
+            each topic. It asks three short questions, then shows what it understood for you to confirm before
+            building the plan.
           </p>
 
-          {!entitlements.voiceAgent ? (
-            <>
-              <div className="space-y-3 max-h-96 overflow-y-auto custom-scrollbar pr-1 min-h-[160px]">
+          <>
+              <div className="min-h-[8rem] flex-1 space-y-6">
                 {intentHistory.length === 0 && !isIntentThinking && (
                   <p className="text-xs text-gray-500 italic">Starting the conversation...</p>
                 )}
                 {intentHistory.map((turn, i) => (
-                  <div key={i} className={`flex ${turn.role === "user" ? "justify-end" : "justify-start"}`}>
+                  <div key={i} className={`group flex flex-col gap-0.5 ${turn.role === "user" ? "items-end" : "items-start"}`}>
                     <div
-                      className={`max-w-[85%] rounded-lg px-3.5 py-2.5 text-sm ${
+                      className={
                         turn.role === "user"
-                          ? "bg-orange-600 text-white"
-                          : "bg-zinc-900 border border-white/10 text-gray-200"
-                      }`}
+                          ? "max-w-[85%] rounded-3xl bg-orange-600 px-4 py-2.5 text-[15px] text-white"
+                          : "max-w-full whitespace-pre-wrap text-[15px] leading-relaxed text-gray-100"
+                      }
                     >
                       {turn.content}
                     </div>
+                    <CopyButton text={turn.content} className="opacity-100 lg:opacity-0 lg:group-hover:opacity-100 focus-visible:opacity-100" />
                   </div>
                 ))}
-                {isIntentThinking && <p className="text-xs text-gray-500 italic">Thinking...</p>}
+                {isIntentThinking && intentStreaming && (
+                  <div className="flex flex-col items-start">
+                    <div className="max-w-full whitespace-pre-wrap text-[15px] leading-relaxed text-gray-100">{intentStreaming}</div>
+                  </div>
+                )}
+                {isIntentThinking && !intentStreaming && <p className="text-xs text-gray-500 italic">Thinking...</p>}
               </div>
 
-              <div className="flex items-center gap-2 pt-1">
-                <Input
-                  value={intentReply}
-                  onChange={(e) => setIntentReply(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      void sendIntentReply();
-                    }
-                  }}
-                  disabled={isIntentThinking}
-                  placeholder="Type your answer..."
-                  className="bg-[#09090b] border-white/15 text-white placeholder:text-zinc-500 h-10"
-                />
-                <Button
-                  onClick={() => void sendIntentReply()}
-                  disabled={isIntentThinking || !intentReply.trim()}
-                  className="bg-orange-600 hover:bg-orange-700 text-white h-10 px-4 font-semibold"
-                >
-                  Send
-                </Button>
-              </div>
+              <div className="relative mt-auto space-y-1 bg-[#070708] pb-1 pt-2 lg:sticky lg:bottom-0">
+                <ListeningIndicator stt={stt} />
+                <div className={cn("flex items-end gap-2 rounded-3xl border bg-[#1b1b1d] py-1.5 pl-5 pr-1.5 transition-colors", stt.status === "recording" ? "border-red-500/60" : "border-white/10 focus-within:border-white/25")}>
+                  <Textarea
+                    rows={1}
+                    value={intentReply}
+                    onChange={(e) => setIntentReply(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (stt.handleKeyDown(e)) return;
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        if (!isIntentThinking) void sendIntentReply();
+                      }
+                    }}
+                    disabled={isIntentThinking}
+                    placeholder="Type your answer, or hold Space to speak..."
+                    className="min-h-0 max-h-40 flex-1 resize-none rounded-none border-0 bg-transparent px-0 py-2 text-[15px] text-white shadow-none placeholder:text-zinc-500"
+                  />
+                  <MicButton stt={stt} disabled={isIntentThinking} />
+                  <Button
+                    onClick={() => void sendIntentReply()}
+                    disabled={isIntentThinking || !intentReply.trim()}
+                    aria-label="Send"
+                    className="h-9 w-9 shrink-0 rounded-full bg-orange-600 p-0 text-white hover:bg-orange-700 disabled:opacity-40"
+                  >
+                    <ArrowUp className="h-4 w-4" />
+                  </Button>
+                </div>
 
-              {/* Only meaningful once the agent has actually asked something. */}
-              {intentHistory.length > 0 && (
-                <div className="flex items-center gap-2 pt-1">
-                  <Button
-                    variant="ghost"
-                    onClick={() => void skipIntentQuestion()}
-                    disabled={isIntentThinking}
-                    className="h-8 px-3 text-xs font-medium text-gray-400 hover:text-white"
-                  >
-                    Skip Question
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    onClick={() => void skipAllIntentQuestions()}
-                    disabled={isIntentThinking}
-                    className="h-8 px-3 text-xs font-medium text-gray-400 hover:text-white"
-                  >
-                    Skip All Questions
-                  </Button>
-                </div>
-              )}
-            </>
-          ) : (
-          <div className="space-y-3 max-h-96 overflow-y-auto custom-scrollbar pr-1 min-h-[160px]">
-            {intentVoice.transcript.length === 0 && <p className="text-xs text-gray-500 italic">Listening...</p>}
-            {intentVoice.transcript.map((turn, i) => (
-              <div key={i} className={`flex ${turn.role === "user" ? "justify-end" : "justify-start"}`}>
-                <div
-                  className={`max-w-[85%] rounded-lg px-3.5 py-2.5 text-sm ${
-                    turn.role === "user" ? "bg-orange-600 text-white" : "bg-zinc-900 border border-white/10 text-gray-200"
-                  }`}
-                >
-                  {turn.text}
-                </div>
+                {/* Only meaningful once the agent has actually asked something. */}
+                {intentHistory.length > 0 && (
+                  <div className="flex items-center justify-center gap-1">
+                    <Button
+                      variant="ghost"
+                      onClick={() => void skipIntentQuestion()}
+                      disabled={isIntentThinking}
+                      className="h-8 px-3 text-xs font-medium text-gray-400 hover:text-white"
+                    >
+                      Skip Question
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      onClick={() => void skipAllIntentQuestions()}
+                      disabled={isIntentThinking}
+                      className="h-8 px-3 text-xs font-medium text-gray-400 hover:text-white"
+                    >
+                      Skip All Questions
+                    </Button>
+                  </div>
+                )}
               </div>
-            ))}
-            {intentVoice.partial && (
-              <div className={`flex ${intentVoice.partial.role === "user" ? "justify-end" : "justify-start"}`}>
-                <div
-                  className={`max-w-[85%] rounded-lg px-3.5 py-2.5 text-sm italic opacity-70 ${
-                    intentVoice.partial.role === "user" ? "bg-orange-600 text-white" : "bg-zinc-900 border border-white/10 text-gray-200"
-                  }`}
-                >
-                  {intentVoice.partial.text}
-                </div>
-              </div>
-            )}
-          </div>
-          )}
+          </>
         </div>
   );
 
   const configFormNode = (
-          <div className="bg-[#0f0f11] border border-white/10 rounded-2xl p-5 space-y-5 shadow-xl">
-            <div className="flex items-center justify-between border-b border-white/5 pb-4">
-              <div>
-                <h5 className="font-bold text-white text-base tracking-wider uppercase">EXAM SETTINGS & SECTIONS</h5>
+          <div className="space-y-8">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <h5 className="font-bold text-white text-sm sm:text-base tracking-wider uppercase leading-tight">EXAM SETTINGS & SECTIONS</h5>
                 <p className="text-xs text-gray-400">Organize section topics for blueprint planning</p>
               </div>
               <Button
                 type="button"
                 onClick={addSection}
                 size="sm"
-                className="bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold rounded-xl shadow-md shadow-orange-950/40 h-9 px-4"
+                className="shrink-0 bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold rounded-xl shadow-md shadow-orange-950/40 h-9 px-3 sm:px-4"
               >
                 <Plus className="h-4 w-4 mr-1.5" /> Add Section
               </Button>
@@ -1548,7 +1611,7 @@ export function AiExamGeneratorForm({
             <div className="space-y-1.5 pb-2">
               <label className="text-xs font-bold text-gray-300 uppercase tracking-wider block">DIFFICULTY LEVEL</label>
               <Select value={difficulty} onValueChange={(val) => { if (val) setDifficulty(val as Difficulty); }}>
-                <SelectTrigger className="w-full sm:w-48 bg-[#14151f] border border-white/15 text-white h-9 text-xs font-semibold rounded-lg px-3">
+                <SelectTrigger className="w-full sm:w-48 text-white h-9 text-xs font-semibold">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-[#14151f] border border-white/15 text-white text-xs">
@@ -1560,12 +1623,12 @@ export function AiExamGeneratorForm({
             </div>
 
             {/* SECTIONS & TOPICS */}
-            <div className="border-t border-white/5 pt-5 space-y-4">
+            <div className="space-y-5">
               <label className="text-xs font-bold text-gray-300 uppercase tracking-wider">SECTIONS & TOPICS</label>
 
-              <div className="space-y-4">
+              <div className="space-y-8">
 {sections.map((section) => (
-                  <div key={section.id} className="bg-[#09090b] border border-white/10 rounded-xl p-3 space-y-3">
+                  <div key={section.id} className="space-y-4">
                     {existingSections.length > 0 && (
                       <div className="space-y-1">
                         <label className="text-[11px] font-bold text-gray-300 uppercase tracking-wider block">ADD TO</label>
@@ -1573,8 +1636,13 @@ export function AiExamGeneratorForm({
                           value={section.targetSectionId || "__new__"}
                           onValueChange={(val) => updateSection(section.id, 'targetSectionId', val === "__new__" ? null : val)}
                         >
-                          <SelectTrigger className="w-full bg-[#14151f] border border-white/15 text-white h-9 text-xs font-semibold rounded-lg px-2.5">
-                            <SelectValue />
+                          <SelectTrigger className="w-full text-white h-9 text-xs font-semibold">
+                            {/* Show the section's name, not its id. */}
+                            <SelectValue>
+                              {(val: string) =>
+                                val === "__new__" ? "+ Create New Section" : existingSections.find((es) => (es._id || es.id) === val)?.title ?? val
+                              }
+                            </SelectValue>
                           </SelectTrigger>
                           <SelectContent className="bg-[#14151f] border border-white/15 text-white text-xs">
                             <SelectItem value="__new__">+ Create New Section</SelectItem>
@@ -1588,7 +1656,7 @@ export function AiExamGeneratorForm({
                       </div>
                     )}
 
-                    <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                    <div className="flex items-center justify-between">
                       {section.targetSectionId ? (
                         <span className="text-white text-base font-bold h-8 flex items-center">
                           {existingSections.find((es) => (es._id || es.id) === section.targetSectionId)?.title || section.name}
@@ -1597,7 +1665,7 @@ export function AiExamGeneratorForm({
                         <Input
                           value={section.name}
                           onChange={e => updateSection(section.id, 'name', e.target.value)}
-                          className="bg-transparent border-none text-white text-base font-bold h-8 focus-visible:ring-0 p-0 focus:outline-none"
+                          className="text-white text-base font-bold h-8 p-0"
                           placeholder="Section Name"
                           required
                         />
@@ -1621,19 +1689,19 @@ export function AiExamGeneratorForm({
                         value={section.subject}
                         onChange={e => updateSection(section.id, 'subject', e.target.value)}
                         placeholder="Subject (e.g. JavaScript)"
-                        className="bg-[#14151f] border border-white/15 text-white text-xs font-bold h-8 w-full rounded-lg focus-visible:ring-orange-500"
+                        className="text-white text-xs font-bold h-8 w-full"
                         required
                       />
                     </div>
 
                     {/* TOPICS */}
                     <div className="space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <label className="text-[11px] font-bold text-gray-300 uppercase tracking-wider">TOPICS</label>
+                      <div className="flex items-center justify-between gap-3">
+                        <label className="text-[11px] font-bold leading-none text-gray-300 uppercase tracking-wider">TOPICS</label>
                         <Button
                           type="button"
                           onClick={() => addTopicToSection(section.id)}
-                          className="h-8 px-4 bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold rounded-lg"
+                          className="h-7 px-3 bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold rounded-lg"
                         >
                           <Plus className="h-3 w-3 mr-1" /> Add Topic
                         </Button>
@@ -1645,7 +1713,7 @@ export function AiExamGeneratorForm({
                               value={topic}
                               onChange={e => updateTopicInSection(section.id, tIdx, e.target.value)}
                               placeholder={`Topic ${tIdx + 1}`}
-                              className="bg-[#14151f] border border-white/15 text-white placeholder:text-zinc-400 h-8 text-xs rounded-lg focus-visible:ring-orange-500 flex-1"
+                              className="text-white placeholder:text-zinc-400 h-8 text-xs flex-1"
                               required
                             />
                             {section.topics.length > 1 && (
@@ -1667,7 +1735,7 @@ export function AiExamGeneratorForm({
                       <div className="space-y-1">
                         <label className="text-[11px] font-bold text-gray-300 uppercase tracking-wider block">TYPE</label>
                         <Select value={section.questionType} onValueChange={val => updateSection(section.id, 'questionType', val)}>
-                          <SelectTrigger className="w-full bg-[#14151f] border border-white/15 text-white h-8 text-xs font-semibold rounded-lg px-2.5">
+                          <SelectTrigger className="w-full text-white h-8 text-xs font-semibold">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent className="bg-[#14151f] border border-white/15 text-white text-xs">
@@ -1684,7 +1752,7 @@ export function AiExamGeneratorForm({
                           max="50"
                           value={section.numberOfQuestions}
                           onChange={e => updateSection(section.id, 'numberOfQuestions', e.target.value)}
-                          className="bg-[#14151f] border border-white/15 text-white h-8 text-xs font-bold rounded-lg text-center"
+                          className="text-white h-8 text-xs font-bold text-center"
                         />
                       </div>
                       <div className="space-y-1">
@@ -1694,7 +1762,7 @@ export function AiExamGeneratorForm({
                           min="1"
                           value={section.marksPerQuestion}
                           onChange={e => updateSection(section.id, 'marksPerQuestion', e.target.value)}
-                          className="bg-[#14151f] border border-white/15 text-white h-8 text-xs font-bold rounded-lg text-center"
+                          className="text-white h-8 text-xs font-bold text-center"
                         />
                       </div>
                     </div>
@@ -1741,52 +1809,14 @@ export function AiExamGeneratorForm({
     </div>
   ) : null;
 
-  const summaryNode = (
-          <div className={cn("space-y-4", !renderShell && "sticky top-6")}>
-            {bookGuideNode}
-            <Card className="bg-[#0f0f11] border border-white/10 rounded-2xl p-5 space-y-4 shadow-xl">
-              <div className="flex items-center justify-between border-b border-white/5 pb-3">
-                <h6 className="font-bold text-white text-xs tracking-wider uppercase">
-                  Exam Summary
-                </h6>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20">
-                  Live Stats
-                </span>
-              </div>
-
-              <div className="space-y-3">
-
-                <div className="grid grid-cols-2 gap-2.5">
-                  <div className="p-3 rounded-xl bg-[#14151f] border border-white/5 text-center space-y-1">
-                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Sections</span>
-                    <span className="text-lg font-extrabold text-white">{sections.length}</span>
-                  </div>
-                  <div className="p-3 rounded-xl bg-[#14151f] border border-white/5 text-center space-y-1">
-                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Questions</span>
-                    <span className="text-lg font-extrabold text-purple-400">
-                      {sections.reduce((acc, s) => acc + (Number(s.numberOfQuestions) || 0), 0)}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="p-3 rounded-xl bg-[#14151f] border border-white/5 text-center space-y-1">
-                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Total Marks</span>
-                  <span className="text-lg font-extrabold text-emerald-400">
-                    {sections.reduce((acc, s) => acc + ((Number(s.numberOfQuestions) || 0) * (Number(s.marksPerQuestion) || 1)), 0)}
-                  </span>
-                </div>
-              </div>
-            </Card>
-          </div>
-  );
-
   if (renderShell) {
-    if (isGenerating) return renderShell({ left: loaderNode, right: summaryNode, footer: null });
+    if (isGenerating) return renderShell({ left: loaderNode, right: bookGuideNode, footer: null, bare: true });
     if (aiStage === "blueprint" && blueprint) {
-      return renderShell({ left: blueprintTreeNode, right: refinementChatNode, footer: blueprintActions });
+      if (showRefine) return renderShell({ left: refinementChatNode, right: null, footer: refineActions, fill: true });
+      return renderShell({ left: blueprintTreeNode, right: null, footer: blueprintActions });
     }
-    if (aiStage === "intent") return renderShell({ left: configRecapNode, right: intentChatNode, footer: intentActions });
-    return renderShell({ left: configFormNode, right: summaryNode, footer: configActions });
+    if (aiStage === "intent") return renderShell({ left: intentChatNode, right: null, footer: intentActions, fill: true, bare: true });
+    return renderShell({ left: configFormNode, right: bookGuideNode, footer: configActions, bare: true });
   }
 
   if (isGenerating) return loaderNode;
@@ -1797,11 +1827,8 @@ export function AiExamGeneratorForm({
     <div className="space-y-0 animate-in fade-in slide-in-from-bottom-1 duration-150 w-full max-w-full px-2 pb-6">
       {aiStage === "blueprint" && blueprint ? (
         <div className="space-y-6">
-          <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-6 items-start">
-            {blueprintTreeNode}
-            {refinementChatNode}
-          </div>
-          <div className={actionBarClass}>{blueprintActions}</div>
+          {showRefine ? refinementChatNode : blueprintTreeNode}
+          <div className={actionBarClass}>{showRefine ? refineActions : blueprintActions}</div>
         </div>
       ) : aiStage === "intent" ? (
         <>
@@ -1810,9 +1837,9 @@ export function AiExamGeneratorForm({
         </>
       ) : (
         <>
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6 items-start w-full">
+          <div className={cn("grid grid-cols-1 gap-6 items-start w-full", bookGuideNode ? "lg:grid-cols-[1fr_320px]" : "mx-auto max-w-3xl")}>
             {configFormNode}
-            {summaryNode}
+            {bookGuideNode && <div className="sticky top-6">{bookGuideNode}</div>}
           </div>
           <div className={cn(actionBarClass, "-mx-1 mt-10")}>{configActions}</div>
         </>

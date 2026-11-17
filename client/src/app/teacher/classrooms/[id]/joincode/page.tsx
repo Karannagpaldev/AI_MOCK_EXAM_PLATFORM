@@ -145,7 +145,7 @@ export default function JoinCodePage() {
                     value={maxUsesInput}
                     onChange={(e) => setMaxUsesInput(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleSaveMaxUses()}
-                    className="w-20 bg-[#18181b] border border-white/10 rounded-lg px-3 py-1.5 text-white text-sm text-center focus:outline-none focus:ring-1 focus:ring-orange-500/50"
+                    className="w-20 py-1.5 text-white text-sm text-center rounded-none border-0 border-b border-white/20 bg-transparent px-0 transition-colors placeholder:text-zinc-500 focus:border-orange-500 focus:outline-none focus:ring-0"
                   />
                   <Button
                     size="sm"
@@ -198,7 +198,7 @@ export default function JoinCodePage() {
                 value={inviteEmail}
                 onChange={(e) => setInviteEmail(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleInvite()}
-                className="flex-1 bg-[#18181b] border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-all text-sm shadow-inner"
+                className="flex-1 py-2.5 text-white placeholder:text-gray-400 transition-all text-sm rounded-none border-0 border-b border-white/20 bg-transparent px-0 transition-colors placeholder:text-zinc-500 focus:border-orange-500 focus:outline-none focus:ring-0"
               />
               <Button className="bg-orange-600 hover:bg-orange-700 text-white shrink-0" onClick={handleInvite} disabled={inviting}>
                 {inviting ? "Sending..." : "Send Invite"}

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Layers, Plus, ClipboardList, ClipboardCheck, Settings, Search, ChevronLeft, ChevronRight, Info, Clock, Pencil } from "lucide-react";
+import { ArrowLeft, Layers, Plus, ClipboardList, ClipboardCheck, Settings, Search, ChevronLeft, ChevronRight, Info, Clock, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -14,10 +14,12 @@ import {
   listSeriesForClassroomService,
   updateSeriesService,
   deleteSeriesService,
+  deleteAssignmentService,
   createAssignmentService,
   listAssignmentsForClassroomService,
 } from "../../../assignments/assignment.service";
 import { formatDateTime } from "@/lib/date";
+import { DateTimeInput } from "@/components/DateTimeInput";
 
 type View = "landing" | "series" | "seriesDetail" | "seriesSettings" | "standalone";
 type StatusFilter = "all" | "upcoming" | "live" | "closed";
@@ -250,6 +252,19 @@ export default function AssignmentsPage() {
     }
   };
 
+  // Deletes one assignment with its questions and students' submissions, then refreshes whatever list is showing.
+  const handleDeleteAssignment = async (assignmentId: string, title: string) => {
+    if (!confirm(`Delete assignment "${title}"? This permanently deletes its questions and students' submissions. This cannot be undone.`)) return;
+    try {
+      await deleteAssignmentService(assignmentId);
+      toast.success("Assignment deleted");
+      loadOverview();
+      if (view === "standalone") loadStandalone(standalonePage, debouncedStandaloneSearch, standaloneStatus);
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to delete assignment");
+    }
+  };
+
   const openSeriesSettings = () => {
     if (!selectedSeries) return;
     setSeriesNameInput(selectedSeries.title);
@@ -402,7 +417,7 @@ export default function AssignmentsPage() {
           ) : (
             <div className="flex gap-3">
               <div className="flex flex-col items-center">
-                <span className="h-2 w-2 rounded-full bg-[#18181b]merald-400 shrink-0" />
+                <span className="h-2 w-2 rounded-full bg-emerald-400 shrink-0" />
                 <span className="w-px flex-1 bg-white/10 my-1" />
                 <span className="h-2 w-2 rounded-full bg-red-400 shrink-0" />
               </div>
@@ -420,11 +435,11 @@ export default function AssignmentsPage() {
           )}
         </div>
 
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-600/10 text-emerald-400 border border-emerald-500/20">
             {a.totalMarks} marks
           </span>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               size="sm"
               variant="outline"
@@ -446,13 +461,24 @@ export default function AssignmentsPage() {
             >
               <ClipboardCheck className="mr-1 h-3.5 w-3.5" /> Submissions
             </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="bg-transparent border-red-500/20 text-red-400 hover:bg-red-500/10"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDeleteAssignment(a.id, a.title);
+              }}
+            >
+              <Trash2 className="mr-1 h-3.5 w-3.5" /> Delete
+            </Button>
           </div>
         </div>
       </CardContent>
     </Card>
   );
 
-  if (loading) return <div className="text-gray-400 text-center py-10">Loading assignments...</div>;
+  if (loading) return <div className="text-gray-400 text-center py-6 sm:py-8 md:py-10">Loading assignments...</div>;
 
   return (
     <div>
@@ -460,7 +486,7 @@ export default function AssignmentsPage() {
       {view === "landing" && (
         <>
           <div className="mb-6">
-            <h3 className="text-2xl font-bold text-white">Assignments</h3>
+            <h3 className="text-xl sm:text-2xl font-bold text-white">Assignments</h3>
             <p className="text-gray-400 text-base mt-1">Choose a category to manage.</p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-2xl">
@@ -468,7 +494,7 @@ export default function AssignmentsPage() {
               onClick={() => setView("series")}
               className="bg-[#0f0f11] border-white/5 hover:border-indigo-500/30 transition-all cursor-pointer"
             >
-              <CardContent className="p-8 flex flex-col items-center text-center">
+              <CardContent className="p-5 sm:p-8 flex flex-col items-center text-center">
                 <div className="h-14 w-14 bg-orange-600/20 text-orange-400 rounded-2xl flex items-center justify-center border border-orange-500/30 mb-4">
                   <Layers className="h-7 w-7" />
                 </div>
@@ -480,7 +506,7 @@ export default function AssignmentsPage() {
               onClick={() => setView("standalone")}
               className="bg-[#0f0f11] border-white/5 hover:border-orange-500/30 transition-all cursor-pointer"
             >
-              <CardContent className="p-8 flex flex-col items-center text-center">
+              <CardContent className="p-5 sm:p-8 flex flex-col items-center text-center">
                 <div className="h-14 w-14 bg-orange-600/20 text-orange-400 rounded-2xl flex items-center justify-center border border-orange-500/30 mb-4">
                   <ClipboardList className="h-7 w-7" />
                 </div>
@@ -498,9 +524,9 @@ export default function AssignmentsPage() {
           <button onClick={() => setView("landing")} className="flex items-center gap-1.5 text-gray-400 hover:text-white text-sm mb-4 transition-colors">
             <ArrowLeft className="h-3.5 w-3.5" /> Back
           </button>
-          <div className="mb-6 flex items-center justify-between">
+          <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h3 className="text-2xl font-bold text-white">Weekly Assignments ({series.length})</h3>
+              <h3 className="text-xl sm:text-2xl font-bold text-white">Weekly Assignments ({series.length})</h3>
               <p className="text-gray-400 text-base mt-1">Ordered assignment series — open one to see its assignments.</p>
             </div>
             <Button className="bg-orange-600 hover:bg-orange-700 text-white shrink-0" onClick={() => setSeriesDialogOpen(true)}>
@@ -509,7 +535,7 @@ export default function AssignmentsPage() {
           </div>
 
           {series.length === 0 ? (
-            <Card className="bg-[#0f0f11] border-white/5 py-10 text-center">
+            <Card className="bg-[#0f0f11] border-white/5 py-6 sm:py-8 md:py-10 text-center">
               <CardContent>
                 <Layers className="h-8 w-8 text-gray-500 mx-auto mb-3" />
                 <p className="text-gray-400">No series yet.</p>
@@ -556,14 +582,14 @@ export default function AssignmentsPage() {
           <button onClick={() => setView("series")} className="flex items-center gap-1.5 text-gray-400 hover:text-white text-sm mb-4 transition-colors">
             <ArrowLeft className="h-3.5 w-3.5" /> Back to Series
           </button>
-          <div className="mb-6 flex items-center justify-between">
+          <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <h3 className="text-2xl font-bold text-white">{selectedSeries.title}</h3>
+              <h3 className="text-xl sm:text-2xl font-bold text-white">{selectedSeries.title}</h3>
               <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${selectedSeries.type === "custom" ? "bg-purple-500/20 text-purple-300" : "bg-orange-500/20 text-orange-300"}`}>
                 {selectedSeries.type === "custom" ? "Custom" : "Weekly"}
               </span>
             </div>
-            <div className="flex gap-2 shrink-0">
+            <div className="flex flex-wrap gap-2 sm:shrink-0">
               <Button variant="outline" className="bg-transparent border-white/10 text-white hover:bg-white/5" onClick={openSeriesSettings}>
                 <Settings className="mr-2 h-4 w-4" /> Update Series
               </Button>
@@ -590,7 +616,7 @@ export default function AssignmentsPage() {
               <>
                 {inSeries.length > 0 && renderStatusTabs(counts, seriesDetailStatus, setSeriesDetailStatus)}
                 {filtered.length === 0 ? (
-                  <Card className="bg-[#0f0f11] border-white/5 py-10 text-center">
+                  <Card className="bg-[#0f0f11] border-white/5 py-6 sm:py-8 md:py-10 text-center">
                     <CardContent>
                       <ClipboardList className="h-8 w-8 text-gray-500 mx-auto mb-3" />
                       <p className="text-gray-400">
@@ -617,7 +643,7 @@ export default function AssignmentsPage() {
           </button>
 
           <div className="mb-6">
-            <h3 className="text-2xl font-bold text-white">Series Settings</h3>
+            <h3 className="text-xl sm:text-2xl font-bold text-white">Series Settings</h3>
             <p className="text-gray-400 text-base mt-1">Update this series' name, or delete it entirely.</p>
           </div>
 
@@ -630,7 +656,7 @@ export default function AssignmentsPage() {
                   value={seriesNameInput}
                   onChange={(e) => setSeriesNameInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSaveSeriesName()}
-                  className="flex-1 bg-[#09090b] border border-white/10 rounded-xl px-4 py-2.5 text-white text-base focus:outline-none focus:ring-1 focus:ring-white/30 transition-all"
+                  className="flex-1 py-2.5 text-white text-base transition-all border-b transition-colors placeholder:text-zinc-500 rounded-none border-0 border-white/20 bg-transparent px-0 focus:border-orange-500 focus:outline-none focus:ring-0"
                 />
                 <Button className="bg-orange-600 hover:bg-orange-700 text-white shrink-0" onClick={handleSaveSeriesName} disabled={savingSeriesName}>
                   {savingSeriesName ? "Saving..." : "Save"}
@@ -661,9 +687,9 @@ export default function AssignmentsPage() {
           <button onClick={() => setView("landing")} className="flex items-center gap-1.5 text-gray-400 hover:text-white text-sm mb-4 transition-colors">
             <ArrowLeft className="h-3.5 w-3.5" /> Back
           </button>
-          <div className="mb-4 flex items-center justify-between">
+          <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h3 className="text-2xl font-bold text-white">Standard Assignments ({standaloneTotal})</h3>
+              <h3 className="text-xl sm:text-2xl font-bold text-white">Standard Assignments ({standaloneTotal})</h3>
               <p className="text-gray-400 text-base mt-1">Class-wide or group-restricted assignments outside any series.</p>
             </div>
             <Button className="bg-orange-600 hover:bg-orange-700 text-white shrink-0" onClick={() => openCreateAssignment()}>
@@ -677,16 +703,16 @@ export default function AssignmentsPage() {
               type="text"
               placeholder="Search assignments..."
               value={standaloneSearchQuery}
-              onChange={(e) => setStandaloneSearchQuery(e.target.value)} className="bg-[#14151f] border border-white/15 text-white placeholder:text-zinc-400 focus:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0 focus:border-white/30 h-11 rounded-xl text-sm transition-all shadow-inner pl-10"
+              onChange={(e) => setStandaloneSearchQuery(e.target.value)} className="text-white placeholder:text-zinc-400 h-11 text-sm transition-all pl-10 border-b transition-colors placeholder:text-zinc-500 rounded-none border-0 border-white/20 bg-transparent px-0 focus:border-orange-500 focus:outline-none focus:ring-0"
             />
           </div>
 
           {renderStatusTabs(standaloneCounts, standaloneStatus, setStandaloneStatus)}
 
           {standaloneLoading ? (
-            <div className="text-gray-400 text-center py-10">Loading...</div>
+            <div className="text-gray-400 text-center py-6 sm:py-8 md:py-10">Loading...</div>
           ) : standaloneAssignments.length === 0 ? (
-            <Card className="bg-[#0f0f11] border-white/5 py-10 text-center">
+            <Card className="bg-[#0f0f11] border-white/5 py-6 sm:py-8 md:py-10 text-center">
               <CardContent>
                 <ClipboardList className="h-8 w-8 text-gray-500 mx-auto mb-3" />
                 <p className="text-gray-400">
@@ -757,7 +783,7 @@ export default function AssignmentsPage() {
                 placeholder={newAssignmentSeriesId ? "e.g. Week 1: Intro to Neural Nets" : "e.g. Chapter 3 Homework"}
                 value={newAssignmentTitle}
                 onChange={(e) => setNewAssignmentTitle(e.target.value)}
-                className="w-full bg-[#18181b] border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-white/30 transition-all text-sm"
+                className="w-full py-3 text-white placeholder:text-gray-500 transition-all text-sm border-b transition-colors placeholder:text-zinc-500 rounded-none border-0 border-white/20 bg-transparent px-0 focus:border-orange-500 focus:outline-none focus:ring-0"
               />
             </div>
             <div className="space-y-1.5">
@@ -779,7 +805,7 @@ export default function AssignmentsPage() {
                   min="1"
                   value={newAssignmentDayGap}
                   onChange={(e) => setNewAssignmentDayGap(e.target.value)}
-                  className="w-full bg-[#18181b] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-1 focus:ring-white/30 transition-all text-sm"
+                  className="w-full py-3 text-white transition-all text-sm border-b transition-colors placeholder:text-zinc-500 rounded-none border-0 border-white/20 bg-transparent px-0 focus:border-orange-500 focus:outline-none focus:ring-0"
                 />
               </div>
             )}
@@ -794,23 +820,21 @@ export default function AssignmentsPage() {
             )}
 
             {newAssignmentSeriesId && isCustomSeriesAssignment && (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium text-gray-300">Start Date</label>
-                  <input
-                    type="datetime-local"
+                  <DateTimeInput
                     value={newAssignmentStartDate}
-                    onChange={(e) => setNewAssignmentStartDate(e.target.value)}
-                    className="w-full bg-[#18181b] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-1 focus:ring-white/30 transition-all text-sm [color-scheme:dark]"
+                    onChange={(v) => setNewAssignmentStartDate(v)}
+                   
                   />
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium text-gray-300">Due Date</label>
-                  <input
-                    type="datetime-local"
+                  <DateTimeInput
                     value={newAssignmentDueDate}
-                    onChange={(e) => setNewAssignmentDueDate(e.target.value)}
-                    className="w-full bg-[#18181b] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-1 focus:ring-white/30 transition-all text-sm [color-scheme:dark]"
+                    onChange={(v) => setNewAssignmentDueDate(v)}
+                   
                   />
                 </div>
               </div>
@@ -818,23 +842,21 @@ export default function AssignmentsPage() {
 
             {!newAssignmentSeriesId && (
               <>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium text-gray-300">Start Date (optional)</label>
-                    <input
-                      type="datetime-local"
+                    <DateTimeInput
                       value={newAssignmentStartDate}
-                      onChange={(e) => setNewAssignmentStartDate(e.target.value)}
-                      className="w-full bg-[#18181b] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-1 focus:ring-white/30 transition-all text-sm [color-scheme:dark]"
+                      onChange={(v) => setNewAssignmentStartDate(v)}
+                     
                     />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium text-gray-300">Due Date (optional)</label>
-                    <input
-                      type="datetime-local"
+                    <DateTimeInput
                       value={newAssignmentDueDate}
-                      onChange={(e) => setNewAssignmentDueDate(e.target.value)}
-                      className="w-full bg-[#18181b] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-1 focus:ring-white/30 transition-all text-sm [color-scheme:dark]"
+                      onChange={(v) => setNewAssignmentDueDate(v)}
+                     
                     />
                   </div>
                 </div>
@@ -843,7 +865,7 @@ export default function AssignmentsPage() {
                   <select
                     value={newAssignmentGroupId}
                     onChange={(e) => setNewAssignmentGroupId(e.target.value)}
-                    className="w-full bg-[#18181b] border border-white/10 text-white rounded-xl h-12 px-4 focus:outline-none focus:ring-1 focus:ring-white/30 text-sm"
+                    className="w-full text-white h-12 text-sm border-b transition-colors placeholder:text-zinc-500 rounded-none border-0 border-white/20 bg-transparent px-0 focus:border-orange-500 focus:outline-none focus:ring-0"
                   >
                     <option value="">Class-wide (all students)</option>
                     {groups.map((g) => (
@@ -884,7 +906,7 @@ export default function AssignmentsPage() {
                 value={newSeriesTitle}
                 onChange={(e) => setNewSeriesTitle(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleCreateSeries()}
-                className="w-full bg-[#18181b] border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-white/30 transition-all text-sm"
+                className="w-full py-3 text-white placeholder:text-gray-500 transition-all text-sm border-b transition-colors placeholder:text-zinc-500 rounded-none border-0 border-white/20 bg-transparent px-0 focus:border-orange-500 focus:outline-none focus:ring-0"
               />
             </div>
             <div className="space-y-1.5">
@@ -892,7 +914,7 @@ export default function AssignmentsPage() {
               <select
                 value={newSeriesGroupId}
                 onChange={(e) => setNewSeriesGroupId(e.target.value)}
-                className="w-full bg-[#18181b] border border-white/10 text-white rounded-xl h-12 px-4 focus:outline-none focus:ring-1 focus:ring-white/30 text-sm"
+                className="w-full text-white h-12 text-sm border-b transition-colors placeholder:text-zinc-500 rounded-none border-0 border-white/20 bg-transparent px-0 focus:border-orange-500 focus:outline-none focus:ring-0"
               >
                 <option value="">Class-wide (all students)</option>
                 {groups.map((g) => (

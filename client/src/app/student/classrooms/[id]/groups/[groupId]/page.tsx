@@ -36,8 +36,8 @@ export default function StudentGroupDetailPage() {
     })();
   }, [classroomId, groupId]);
 
-  if (loading) return <div className="text-gray-400 text-center py-10">Loading...</div>;
-  if (!group) return <div className="text-gray-400 text-center py-10">Group not found</div>;
+  if (loading) return <div className="text-gray-400 text-center py-6 sm:py-8 md:py-10">Loading...</div>;
+  if (!group) return <div className="text-gray-400 text-center py-6 sm:py-8 md:py-10">Group not found</div>;
 
   return (
     <div>

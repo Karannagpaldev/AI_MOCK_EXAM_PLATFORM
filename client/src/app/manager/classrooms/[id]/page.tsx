@@ -144,7 +144,8 @@ export default function ManagerClassroomDetailPage() {
   const loadExams = async () => {
     try {
       const res = await listExamsForClassroomService(classroomId);
-      setExams(res.data || []);
+      // The server returns one page of exams as { data, total, ... }.
+      setExams(Array.isArray(res.data) ? res.data : res.data?.data || []);
     } catch {
       toast.error("Failed to load exams");
     }
@@ -320,11 +321,11 @@ export default function ManagerClassroomDetailPage() {
     }
   };
 
-  if (loading) return <div className="p-10 text-white text-center">Loading classroom...</div>;
-  if (!classroom) return <div className="p-10 text-white text-center">Classroom not found</div>;
+  if (loading) return <div className="p-4 sm:p-6 md:p-10 text-white text-center">Loading classroom...</div>;
+  if (!classroom) return <div className="p-4 sm:p-6 md:p-10 text-white text-center">Classroom not found</div>;
 
   return (
-    <div className="p-10 h-full overflow-y-auto custom-scrollbar">
+    <div className="p-4 sm:p-6 md:p-10 h-full overflow-y-auto custom-scrollbar">
       <button
         onClick={() => router.push("/manager/classrooms")}
         className="flex items-center gap-2 text-gray-400 hover:text-white text-sm mb-6 transition-colors"
@@ -342,9 +343,9 @@ export default function ManagerClassroomDetailPage() {
                 value={nameInput}
                 onChange={(e) => setNameInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleSaveName()}
-                className="bg-[#14151f] border border-white/15 rounded-lg px-3 py-1.5 text-2xl font-bold text-white focus:outline-none focus:ring-1 focus:ring-white/30 transition-all"
+                className="py-1.5 text-2xl font-bold text-white transition-all border-b transition-colors placeholder:text-zinc-500 rounded-none border-0 border-white/20 bg-transparent px-0 focus:border-orange-500 focus:outline-none focus:ring-0"
               />
-              <Button size="icon" className="bg-[#18181b]merald-600 hover:bg-[#18181b]merald-700 text-white shrink-0" onClick={handleSaveName} disabled={savingName}>
+              <Button size="icon" className="bg-emerald-600 hover:bg-emerald-700 text-white shrink-0" onClick={handleSaveName} disabled={savingName}>
                 <Check className="h-4 w-4" />
               </Button>
               <Button size="icon" variant="ghost" className="text-gray-400 hover:text-white shrink-0" onClick={() => setEditingName(false)}>
@@ -353,7 +354,7 @@ export default function ManagerClassroomDetailPage() {
             </div>
           ) : (
             <div className="flex items-center gap-2">
-              <h2 className="text-3xl font-bold text-white tracking-tight truncate">{classroom.name}</h2>
+              <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight truncate">{classroom.name}</h2>
               <Button size="icon" variant="ghost" className="text-gray-400 hover:text-white shrink-0" onClick={handleStartEditName} title="Rename classroom">
                 <Pencil className="h-4 w-4" />
               </Button>
@@ -416,7 +417,7 @@ export default function ManagerClassroomDetailPage() {
                     value={maxUsesInput}
                     onChange={(e) => setMaxUsesInput(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleSaveMaxUses()}
-                    className="w-20 bg-[#18181b] border border-white/10 rounded-lg px-3 py-1.5 text-white text-sm text-center focus:outline-none focus:ring-1 focus:ring-blue-500/50"
+                    className="w-20 py-1.5 text-white text-sm text-center border-b transition-colors placeholder:text-zinc-500 rounded-none border-0 border-white/20 bg-transparent px-0 focus:border-orange-500 focus:outline-none focus:ring-0"
                   />
                   <Button
                     size="sm"
@@ -467,9 +468,9 @@ export default function ManagerClassroomDetailPage() {
                     value={inviteEmail}
                     onChange={(e) => setInviteEmail(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleInvite()}
-                    className="flex-1 bg-[#18181b] border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-all text-sm shadow-inner"
+                    className="flex-1 py-2.5 text-white placeholder:text-gray-400 transition-all text-sm border-b transition-colors placeholder:text-zinc-500 rounded-none border-0 border-white/20 bg-transparent px-0 focus:border-orange-500 focus:outline-none focus:ring-0"
                   />
-                  <Button className="bg-[#18181b]merald-600 hover:bg-[#18181b]merald-700 text-white shrink-0" onClick={handleInvite} disabled={inviting}>
+                  <Button className="bg-emerald-600 hover:bg-emerald-700 text-white shrink-0" onClick={handleInvite} disabled={inviting}>
                     {inviting ? "Sending..." : "Send Invite"}
                   </Button>
                 </div>
@@ -486,7 +487,7 @@ export default function ManagerClassroomDetailPage() {
                 type="text"
                 placeholder="Search students by name or email..."
                 value={studentSearchQuery}
-                onChange={(e) => setStudentSearchQuery(e.target.value)} className="bg-[#14151f] border border-white/15 text-white placeholder:text-zinc-400 focus:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0 focus:border-white/30 h-11 rounded-xl text-sm transition-all shadow-inner pl-10"
+                onChange={(e) => setStudentSearchQuery(e.target.value)} className="text-white placeholder:text-zinc-400 h-11 text-sm transition-all pl-10 border-b transition-colors placeholder:text-zinc-500 rounded-none border-0 border-white/20 bg-transparent px-0 focus:border-orange-500 focus:outline-none focus:ring-0"
               />
             </div>
 
@@ -508,7 +509,7 @@ export default function ManagerClassroomDetailPage() {
                       <p className="text-gray-500 text-xs">{s.email}</p>
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${s.status === "active" ? "bg-[#18181b]merald-500/15 text-emerald-200 border border-emerald-500/30" : "bg-zinc-800 text-white/70 border border-zinc-700"}`}>
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${s.status === "active" ? "bg-emerald-500/15 text-emerald-200 border border-emerald-500/30" : "bg-zinc-800 text-white/70 border border-zinc-700"}`}>
                         {s.status}
                       </span>
                       <span className="text-gray-500 text-xs">Joined {formatDate(s.enrolledAt)}</span>
@@ -533,9 +534,9 @@ export default function ManagerClassroomDetailPage() {
                   value={teacherEmail}
                   onChange={(e) => setTeacherEmail(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleAddTeacher()}
-                  className="flex-1 bg-[#09090b] border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder:text-gray-600 focus:outline-none focus:ring-1 focus:ring-white/30 transition-all text-sm"
+                  className="flex-1 py-2.5 text-white placeholder:text-gray-600 transition-all text-sm border-b transition-colors placeholder:text-zinc-500 rounded-none border-0 border-white/20 bg-transparent px-0 focus:border-orange-500 focus:outline-none focus:ring-0"
                 />
-                <Button className="bg-[#18181b]merald-600 hover:bg-[#18181b]merald-700 text-white shrink-0" onClick={handleAddTeacher} disabled={addingTeacher}>
+                <Button className="bg-emerald-600 hover:bg-emerald-700 text-white shrink-0" onClick={handleAddTeacher} disabled={addingTeacher}>
                   {addingTeacher ? "Adding..." : "Add"}
                 </Button>
               </div>
@@ -548,12 +549,12 @@ export default function ManagerClassroomDetailPage() {
               type="text"
               placeholder="Search teachers by name or email..."
               value={teacherSearchQuery}
-              onChange={(e) => setTeacherSearchQuery(e.target.value)} className="bg-[#14151f] border border-white/15 text-white placeholder:text-zinc-400 focus:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0 focus:border-white/30 h-11 rounded-xl text-sm transition-all shadow-inner pl-10"
+              onChange={(e) => setTeacherSearchQuery(e.target.value)} className="text-white placeholder:text-zinc-400 h-11 text-sm transition-all pl-10 border-b transition-colors placeholder:text-zinc-500 rounded-none border-0 border-white/20 bg-transparent px-0 focus:border-orange-500 focus:outline-none focus:ring-0"
             />
           </div>
 
           {teachers.length === 0 ? (
-            <Card className="bg-[#0f0f11] border-white/5 py-10 text-center">
+            <Card className="bg-[#0f0f11] border-white/5 py-6 sm:py-8 md:py-10 text-center">
               <CardContent>
                 <Users className="h-8 w-8 text-gray-500 mx-auto mb-3" />
                 <p className="text-gray-400">
@@ -615,7 +616,7 @@ export default function ManagerClassroomDetailPage() {
           </div>
 
           {exams.length === 0 ? (
-            <Card className="bg-[#0f0f11] border-white/5 py-10 text-center">
+            <Card className="bg-[#0f0f11] border-white/5 py-6 sm:py-8 md:py-10 text-center">
               <CardContent>
                 <FileText className="h-8 w-8 text-gray-500 mx-auto mb-3" />
                 <p className="text-gray-400">No exams yet.</p>

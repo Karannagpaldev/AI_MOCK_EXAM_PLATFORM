@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useState } from "react";
-import { Plus, Trash2, ChevronDown, ChevronRight, BookOpen, Layers, Hash, AlertTriangle, BookMarked } from "lucide-react";
+import { Plus, Trash2, ChevronDown, ChevronRight, AlertTriangle, BookMarked, BookOpen, Sparkles, Pencil, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
 export interface BlueprintSubtopic {
   name: string;
@@ -50,14 +51,45 @@ interface BlueprintTreeViewerProps {
   onChange: (updatedBlueprint: BlueprintTree) => void;
   // When the exam is built from a book: subsection id → where it is, to show each subtopic's source.
   sourceLookup?: Record<string, SubtopicSourceInfo>;
+  // Opens the refinement chat. The button is only shown when this is given.
+  onRefine?: () => void;
+  // Rename / delete a whole section. The owner keeps its own section list in step, so the buttons only show when given.
+  onRenameSection?: (sectionIndex: number, name: string) => void;
+  onDeleteSection?: (sectionIndex: number) => void;
 }
 
-export function BlueprintTreeViewer({ blueprint, onChange, sourceLookup }: BlueprintTreeViewerProps) {
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+const countOf = (topics: BlueprintTopic[]) =>
+  topics.reduce((tAcc, top) => tAcc + top.subtopics.reduce((stAcc, st) => stAcc + (st.allocatedQuestions || 0), 0), 0);
+
+// Names and subtopics are editable but read like plain text: no underline until you hover or click into one.
+const plainField = "rounded-md border-b-0 px-2 hover:bg-white/5 focus:border-b-0 focus:bg-white/5";
+
+const outlineButton =
+  "inline-flex h-8 items-center gap-1 rounded-md border border-orange-500/30 bg-orange-500/10 px-2.5 text-xs font-bold text-orange-400 transition-colors hover:bg-orange-500/20 hover:text-orange-300";
+
+export function BlueprintTreeViewer({ blueprint, onChange, sourceLookup, onRefine, onRenameSection, onDeleteSection }: BlueprintTreeViewerProps) {
   const [collapsedSections, setCollapsedSections] = useState<Record<number, boolean>>({});
-  const [collapsedBlocks] = useState<Record<string, boolean>>({});
+  const [editingSection, setEditingSection] = useState<number | null>(null);
+  const [draftName, setDraftName] = useState("");
+
+  const saveSectionName = (sIdx: number) => {
+    const name = draftName.trim();
+    if (!name) return;
+    onRenameSection?.(sIdx, name);
+    setEditingSection(null);
+  };
+
+  const handleDeleteSection = (sIdx: number, questions: number) => {
+    const detail = questions > 0 ? ` Its ${plural(questions, "question")} will not be generated.` : "";
+    if (!confirm(`Delete this section from the plan?${detail}`)) return;
+    setEditingSection(null);
+    onDeleteSection?.(sIdx);
+  };
 
   const toggleSectionCollapse = (sIdx: number) => {
-    setCollapsedSections(prev => ({ ...prev, [sIdx]: !prev[sIdx] }));
+    setCollapsedSections((prev) => ({ ...prev, [sIdx]: !prev[sIdx] }));
   };
 
   const updateBlueprint = (updater: (draft: BlueprintTree) => void) => {
@@ -67,275 +99,288 @@ export function BlueprintTreeViewer({ blueprint, onChange, sourceLookup }: Bluep
   };
 
   const handleUpdateBlockSubject = (sIdx: number, bIdx: number, newSubject: string) => {
-    updateBlueprint(draft => { draft.sections[sIdx].blocks[bIdx].subject = newSubject; });
+    updateBlueprint((draft) => {
+      draft.sections[sIdx].blocks[bIdx].subject = newSubject;
+    });
   };
 
   const handleUpdateTopic = (sIdx: number, bIdx: number, tIdx: number, newTitle: string) => {
-    updateBlueprint(draft => { draft.sections[sIdx].blocks[bIdx].topics[tIdx].topic = newTitle; });
+    updateBlueprint((draft) => {
+      draft.sections[sIdx].blocks[bIdx].topics[tIdx].topic = newTitle;
+    });
   };
 
   const handleAddTopic = (sIdx: number, bIdx: number) => {
-    updateBlueprint(draft => {
+    updateBlueprint((draft) => {
       draft.sections[sIdx].blocks[bIdx].topics.push({
         topic: "New Topic",
-        subtopics: [{ name: "New Subtopic", allocatedQuestions: 1 }]
+        subtopics: [{ name: "New Subtopic", allocatedQuestions: 1 }],
       });
     });
   };
 
   const handleDeleteTopic = (sIdx: number, bIdx: number, tIdx: number) => {
-    updateBlueprint(draft => { draft.sections[sIdx].blocks[bIdx].topics.splice(tIdx, 1); });
+    updateBlueprint((draft) => {
+      draft.sections[sIdx].blocks[bIdx].topics.splice(tIdx, 1);
+    });
   };
 
   const handleUpdateSubtopicName = (sIdx: number, bIdx: number, tIdx: number, stIdx: number, newName: string) => {
-    updateBlueprint(draft => { draft.sections[sIdx].blocks[bIdx].topics[tIdx].subtopics[stIdx].name = newName; });
+    updateBlueprint((draft) => {
+      draft.sections[sIdx].blocks[bIdx].topics[tIdx].subtopics[stIdx].name = newName;
+    });
   };
 
   const handleUpdateSubtopicCount = (sIdx: number, bIdx: number, tIdx: number, stIdx: number, delta: number) => {
-    updateBlueprint(draft => {
-      const current = draft.sections[sIdx].blocks[bIdx].topics[tIdx].subtopics[stIdx].allocatedQuestions || 0;
-      draft.sections[sIdx].blocks[bIdx].topics[tIdx].subtopics[stIdx].allocatedQuestions = Math.max(0, current + delta);
+    updateBlueprint((draft) => {
+      const subtopic = draft.sections[sIdx].blocks[bIdx].topics[tIdx].subtopics[stIdx];
+      subtopic.allocatedQuestions = Math.max(0, (subtopic.allocatedQuestions || 0) + delta);
     });
   };
 
   const handleAddSubtopic = (sIdx: number, bIdx: number, tIdx: number) => {
-    updateBlueprint(draft => {
+    updateBlueprint((draft) => {
       draft.sections[sIdx].blocks[bIdx].topics[tIdx].subtopics.push({ name: "New Subtopic", allocatedQuestions: 1 });
     });
   };
 
   const handleDeleteSubtopic = (sIdx: number, bIdx: number, tIdx: number, stIdx: number) => {
-    updateBlueprint(draft => { draft.sections[sIdx].blocks[bIdx].topics[tIdx].subtopics.splice(stIdx, 1); });
+    updateBlueprint((draft) => {
+      draft.sections[sIdx].blocks[bIdx].topics[tIdx].subtopics.splice(stIdx, 1);
+    });
   };
 
-  const totalQuestions = blueprint.sections.reduce((sAcc, sec) => {
-    return sAcc + sec.blocks.reduce((bAcc, block) => {
-      return bAcc + block.topics.reduce((tAcc, top) => {
-        return tAcc + top.subtopics.reduce((stAcc, st) => stAcc + (st.allocatedQuestions || 0), 0);
-      }, 0);
-    }, 0);
-  }, 0);
+  const totalQuestions = blueprint.sections.reduce(
+    (sAcc, sec) => sAcc + sec.blocks.reduce((bAcc, block) => bAcc + countOf(block.topics), 0),
+    0
+  );
 
   return (
-    <div className="space-y-6 bg-[#0f0f11] border border-white/10 rounded-2xl p-6 shadow-2xl">
-      {/* Header Banner */}
-      <div className="bg-[#14151f] border border-white/10 rounded-xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <span className="text-[11px] font-bold text-orange-400 uppercase tracking-wider block mb-1">
-            Exam Blueprint
-          </span>
-          <h3 className="text-xl font-extrabold text-white">{blueprint.title}</h3>
-          <p className="text-xs text-zinc-400 mt-0.5">
-            Each block is subject-scoped. Review and adjust blocks, topics, subtopics, and question counts below.
+    <div className="mx-auto w-full max-w-3xl space-y-10">
+      {/* Header */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
+          <span className="block text-[11px] font-bold uppercase tracking-wider text-orange-400">Exam blueprint</span>
+          <h3 className="mt-1 break-words text-xl font-extrabold text-white sm:text-2xl">{blueprint.title}</h3>
+          <p className="mt-1 text-xs text-zinc-400">
+            {blueprint.sections.length > 1 && `${plural(totalQuestions, "question")} · ${plural(blueprint.sections.length, "section")}. `}Adjust topics, subtopics and counts below.
           </p>
         </div>
-
-        <div className="flex items-center gap-3 bg-[#0a0a0d] border border-white/10 px-4 py-2.5 rounded-xl shrink-0">
-          <div className="flex items-center gap-2">
-            <Hash className="h-4 w-4 text-orange-400" />
-            <span className="text-xs font-bold text-white">{totalQuestions} Questions</span>
-          </div>
-          <span className="text-zinc-700">|</span>
-          <div className="flex items-center gap-2">
-            <Layers className="h-4 w-4 text-purple-400" />
-            <span className="text-xs font-bold text-white">{blueprint.sections.length} Sections</span>
-          </div>
-        </div>
+        {onRefine && (
+          <Button
+            onClick={onRefine}
+            className="h-10 shrink-0 gap-2 self-start rounded-full bg-orange-600 px-5 text-sm font-semibold text-white hover:bg-orange-700 sm:self-auto"
+          >
+            <Sparkles className="h-4 w-4" /> Refine with AI
+          </Button>
+        )}
       </div>
 
-      {/* Sections List */}
-      <div className="space-y-6">
-        {blueprint.sections.map((section, sIdx) => {
-          const isCollapsed = collapsedSections[sIdx];
-          const sectionQuestionsCount = section.blocks.reduce((bAcc, block) => {
-            return bAcc + block.topics.reduce((tAcc, top) => {
-              return tAcc + top.subtopics.reduce((stAcc, st) => stAcc + (st.allocatedQuestions || 0), 0);
-            }, 0);
-          }, 0);
+      {/* Sections */}
+      {blueprint.sections.map((section, sIdx) => {
+        const isCollapsed = collapsedSections[sIdx];
+        const sectionQuestionsCount = section.blocks.reduce((bAcc, block) => bAcc + countOf(block.topics), 0);
+        const defaultName = `Section ${String.fromCharCode(65 + sIdx)}`;
 
-          return (
-            <div key={sIdx} className="bg-[#12131a] border border-white/10 rounded-xl overflow-hidden shadow-lg">
-              {/* Section Header */}
-              <div className="bg-[#181924] px-5 py-3.5 flex items-center justify-between border-b border-white/5 select-none">
-                <div className="flex items-center gap-3 cursor-pointer" onClick={() => toggleSectionCollapse(sIdx)}>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-400 hover:text-white p-0">
-                    {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                  </Button>
-                  <span className="text-xs font-extrabold text-orange-400 bg-orange-500/10 px-2 py-0.5 rounded border border-orange-500/30">
-                    Section {String.fromCharCode(65 + sIdx)}
+        return (
+          <section key={sIdx} className="overflow-hidden rounded-xl border border-white/10 bg-white/[0.02]">
+            {/* Section header: open/close, name, count, and edit / delete */}
+            <div className="flex items-center gap-2 border-b border-white/5 bg-white/[0.04] px-4 py-3 sm:gap-3 sm:px-5">
+              {editingSection === sIdx ? (
+                <>
+                  <span className="shrink-0 rounded border border-orange-500/30 bg-orange-500/10 px-2 py-0.5 text-xs font-extrabold text-orange-400">
+                    {defaultName}
                   </span>
-                  <h4 className="text-sm font-bold text-white">{section.name}</h4>
-                  <span className="text-[10px] font-semibold text-zinc-400 bg-white/5 px-2 py-0.5 rounded border border-white/10 uppercase">
-                    {section.blocks.length} Blocks
-                  </span>
-                </div>
-                <span className="text-xs font-semibold text-zinc-300">
-                  {sectionQuestionsCount} Questions
-                </span>
-              </div>
-
-              {/* Blocks */}
-              {!isCollapsed && (
-                <div className="p-5 space-y-5">
-                  {section.blocks.length === 0 ? (
-                    <p className="text-xs text-zinc-500 italic text-center py-4">No blocks in this section yet.</p>
-                  ) : (
-                    section.blocks.map((blockObj, bIdx) => {
-                      const blockCollapsed = collapsedBlocks[`${sIdx}-${bIdx}`];
-                      const blockQuestionsCount = blockObj.topics.reduce((tAcc, top) => {
-                        return tAcc + top.subtopics.reduce((stAcc, st) => stAcc + (st.allocatedQuestions || 0), 0);
-                      }, 0);
-
-                      return (
-                        <div key={bIdx} className="bg-[#151622] border border-white/10 rounded-xl overflow-hidden shadow-sm">
-                          {/* Block Header */}
-                          <div className="bg-[#1c1e2b] px-4 py-3 flex items-center justify-between border-b border-white/5">
-                            <div className="flex items-center gap-3 flex-1 min-w-0">
-                              <BookOpen className="h-4 w-4 text-purple-400 shrink-0" />
-                              <Input
-                                value={blockObj.name}
-                                onChange={e => updateBlueprint(d => { d.sections[sIdx].blocks[bIdx].name = e.target.value; })}
-                                placeholder="Block name..."
-                                className="bg-[#0b0c10] border border-white/10 text-white font-bold text-sm h-8 w-44 focus:border-purple-500"
-                              />
-                              <div className="flex items-center gap-2 min-w-0 flex-1">
-                                <span className="text-[10px] font-semibold text-zinc-400 uppercase shrink-0">Subject</span>
-                                <Input
-                                  value={blockObj.subject}
-                                  onChange={e => handleUpdateBlockSubject(sIdx, bIdx, e.target.value)}
-                                  placeholder="Subject..."
-                                  className="bg-[#0b0c10] border border-white/10 text-white text-sm h-8 flex-1 focus:border-purple-500"
-                                />
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                              <span className="text-[10px] font-semibold text-zinc-400 bg-white/5 px-2 py-0.5 rounded border border-white/10 uppercase">
-                                {blockObj.question_type || "mcq"}
-                              </span>
-                              <span className="text-xs font-bold text-purple-400 bg-purple-500/10 px-2.5 py-1 rounded border border-purple-500/30">
-                                {blockQuestionsCount} Questions
-                              </span>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleAddTopic(sIdx, bIdx)}
-                                className="bg-purple-500/10 border-purple-500/30 text-purple-300 hover:bg-purple-500/20 text-xs font-bold h-8 px-3"
-                              >
-                                <Plus className="h-3.5 w-3.5 mr-1" /> Add Topic
-                              </Button>
-                            </div>
-                          </div>
-
-                          {/* Topics Container */}
-                          {!blockCollapsed && (
-                            <div className="p-4 space-y-4">
-                              {sourceLookup && blockObj.unmatchedTopics && blockObj.unmatchedTopics.length > 0 && (
-                                <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-xs text-amber-200">
-                                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-400" />
-                                  <span>
-                                    Not found in this book, so no questions were planned for:{" "}
-                                    <span className="font-semibold">{blockObj.unmatchedTopics.join(", ")}</span>
-                                  </span>
-                                </div>
-                              )}
-                              {blockObj.topics.length === 0 ? (
-                                <p className="text-xs text-zinc-500 italic text-center py-4">No topics in this block yet.</p>
-                              ) : (
-                                blockObj.topics.map((topicObj, tIdx) => {
-                                  const topicQuestionsCount = topicObj.subtopics.reduce((stAcc, st) => stAcc + (st.allocatedQuestions || 0), 0);
-
-                                  return (
-                                    <div key={tIdx} className="bg-[#0f1018] border border-white/5 rounded-xl p-4 space-y-3">
-                                      {/* Topic Row */}
-                                      <div className="flex items-center justify-between gap-3 border-b border-white/5 pb-3">
-                                        <div className="flex items-center gap-2 flex-1">
-                                          <BookOpen className="h-4 w-4 text-orange-400 shrink-0" />
-                                          <Input
-                                            value={topicObj.topic}
-                                            onChange={e => handleUpdateTopic(sIdx, bIdx, tIdx, e.target.value)}
-                                            placeholder="Enter topic title..."
-                                            className="bg-[#0b0c10] border border-white/10 text-white font-bold text-sm h-9 flex-1 focus:border-orange-500"
-                                          />
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                          <span className="text-xs font-bold text-orange-400 bg-orange-500/10 px-2.5 py-1 rounded border border-orange-500/30 shrink-0">
-                                            {topicQuestionsCount} Questions
-                                          </span>
-                                          <Button
-                                            size="sm"
-                                            variant="ghost"
-                                            onClick={() => handleAddSubtopic(sIdx, bIdx, tIdx)}
-                                            className="text-xs text-orange-300 hover:text-white bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/30 h-8 px-2.5"
-                                          >
-                                            <Plus className="h-3.5 w-3.5 mr-1" /> Subtopic
-                                          </Button>
-                                          <Button
-                                            size="sm"
-                                            variant="ghost"
-                                            onClick={() => handleDeleteTopic(sIdx, bIdx, tIdx)}
-                                            className="text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 h-8 px-2"
-                                          >
-                                            <Trash2 className="h-3.5 w-3.5" />
-                                          </Button>
-                                        </div>
-                                      </div>
-
-                                      {/* Subtopics Rows */}
-                                      <div className="space-y-2 pl-4">
-                                        {topicObj.subtopics.map((stObj, stIdx) => (
-                                          <div key={stIdx} className="bg-[#0b0c10] border border-white/5 rounded-lg px-3.5 py-2 group hover:border-white/20 transition-all">
-                                          <div className="flex items-center justify-between gap-3">
-                                            <span className="text-orange-400 text-xs font-bold">•</span>
-                                            <Input
-                                              value={stObj.name}
-                                              onChange={e => handleUpdateSubtopicName(sIdx, bIdx, tIdx, stIdx, e.target.value)}
-                                              placeholder="Subtopic name..."
-                                              className="bg-transparent border-none text-xs text-zinc-100 font-medium h-7 flex-1 focus:ring-0 focus:outline-none focus:text-white"
-                                            />
-                                            <div className="flex items-center gap-2 shrink-0">
-                                              <div className="flex items-center bg-[#151624] border border-white/10 rounded-md overflow-hidden h-7">
-                                                <button
-                                                  onClick={() => handleUpdateSubtopicCount(sIdx, bIdx, tIdx, stIdx, -1)}
-                                                  className="px-2 text-xs text-zinc-400 hover:text-white hover:bg-white/10 h-full font-bold transition-colors"
-                                                >-</button>
-                                                <span className="px-2.5 text-xs font-bold text-orange-400 border-x border-white/10 min-w-[70px] text-center">
-                                                  {stObj.allocatedQuestions || 0} Questions
-                                                </span>
-                                                <button
-                                                  onClick={() => handleUpdateSubtopicCount(sIdx, bIdx, tIdx, stIdx, 1)}
-                                                  className="px-2 text-xs text-zinc-400 hover:text-white hover:bg-white/10 h-full font-bold transition-colors"
-                                                >+</button>
-                                              </div>
-                                              <button
-                                                onClick={() => handleDeleteSubtopic(sIdx, bIdx, tIdx, stIdx)}
-                                                className="text-zinc-500 hover:text-red-400 p-1 transition-colors"
-                                              >
-                                                <Trash2 className="h-3.5 w-3.5" />
-                                              </button>
-                                            </div>
-                                          </div>
-                                          {sourceLookup && (
-                                            <SubtopicSource sourceNodeIds={stObj.sourceNodeIds} sourceLookup={sourceLookup} />
-                                          )}
-                                          </div>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  );
-                                })
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })
+                  <Input
+                    autoFocus
+                    value={draftName}
+                    onChange={(e) => setDraftName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") saveSectionName(sIdx);
+                      if (e.key === "Escape") setEditingSection(null);
+                    }}
+                    placeholder="Section name..."
+                    className="h-8 min-w-0 flex-1 text-sm font-bold text-white"
+                  />
+                  <button type="button" onClick={() => saveSectionName(sIdx)} aria-label="Save name" className="rounded-md p-1.5 text-green-400 transition-colors hover:bg-green-500/10">
+                    <Check className="h-4 w-4" />
+                  </button>
+                  <button type="button" onClick={() => setEditingSection(null)} aria-label="Cancel" className="rounded-md p-1.5 text-zinc-400 transition-colors hover:bg-white/10 hover:text-white">
+                    <X className="h-4 w-4" />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button type="button" onClick={() => toggleSectionCollapse(sIdx)} className="flex min-w-0 flex-1 items-center gap-2 text-left sm:gap-3">
+                    {isCollapsed ? (
+                      <ChevronRight className="h-4 w-4 shrink-0 text-zinc-400" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4 shrink-0 text-zinc-400" />
+                    )}
+                    <span className="shrink-0 rounded border border-orange-500/30 bg-orange-500/10 px-2 py-0.5 text-xs font-extrabold text-orange-400">
+                      {defaultName}
+                    </span>
+                    {/* A section with the default name would just repeat the label, so only show a custom name. */}
+                    {section.name.trim().toLowerCase() !== defaultName.toLowerCase() && (
+                      <h4 className="min-w-0 truncate text-sm font-bold text-white">{section.name}</h4>
+                    )}
+                  </button>
+                  <span className="shrink-0 text-xs font-semibold text-zinc-300">{plural(sectionQuestionsCount, "question")}</span>
+                  {onRenameSection && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDraftName(section.name);
+                        setEditingSection(sIdx);
+                      }}
+                      aria-label="Rename section"
+                      className="rounded-md p-1.5 text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
                   )}
-                </div>
+                  {onDeleteSection && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteSection(sIdx, sectionQuestionsCount)}
+                      disabled={blueprint.sections.length <= 1}
+                      aria-label="Delete section"
+                      title={blueprint.sections.length <= 1 ? "An exam needs at least one section" : "Delete section"}
+                      className="rounded-md p-1.5 text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </>
               )}
             </div>
-          );
-        })}
-      </div>
+
+            {!isCollapsed && (
+              <div className="space-y-4 p-3 sm:p-5">
+                {section.blocks.length === 0 ? (
+                  <p className="py-4 text-center text-xs italic text-zinc-500">No blocks in this section yet.</p>
+                ) : (
+                  section.blocks.map((blockObj, bIdx) => (
+                    <div key={bIdx} className="space-y-4">
+                      {/* One subject and question type per section: its details and a way to add topics */}
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                        <div className="flex min-w-[10rem] flex-1 items-center gap-2">
+                          <span className="shrink-0 text-[10px] font-semibold uppercase text-zinc-500">Subject</span>
+                          <Input
+                            value={blockObj.subject}
+                            onChange={(e) => handleUpdateBlockSubject(sIdx, bIdx, e.target.value)}
+                            placeholder="Subject..."
+                            className={cn(plainField, "h-8 min-w-0 flex-1 text-sm font-semibold text-white")}
+                          />
+                        </div>
+                        <span className="rounded border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase text-zinc-400">
+                          {blockObj.question_type || "mcq"}
+                        </span>
+                        <button type="button" onClick={() => handleAddTopic(sIdx, bIdx)} className={outlineButton}>
+                          <Plus className="h-3.5 w-3.5" /> Add Topic
+                        </button>
+                      </div>
+
+                      <div className="space-y-3">
+                        {sourceLookup && blockObj.unmatchedTopics && blockObj.unmatchedTopics.length > 0 && (
+                          <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-xs text-amber-200">
+                            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+                            <span>
+                              Not found in this book, so no questions were planned for:{" "}
+                              <span className="font-semibold">{blockObj.unmatchedTopics.join(", ")}</span>
+                            </span>
+                          </div>
+                        )}
+                        {blockObj.topics.length === 0 ? (
+                          <p className="py-4 text-center text-xs italic text-zinc-500">No topics in this block yet.</p>
+                        ) : (
+                          blockObj.topics.map((topicObj, tIdx) => (
+                            <div key={tIdx} className="space-y-3 rounded-xl border border-white/5 bg-black/30 p-3 sm:p-4">
+                              {/* Topic row */}
+                              <div className="flex flex-wrap items-center gap-x-2 gap-y-2 border-b border-white/5 pb-3">
+                                <div className="flex min-w-[10rem] flex-1 items-center gap-2">
+                                  <BookOpen className="h-4 w-4 shrink-0 text-orange-400" />
+                                  <Input
+                                    value={topicObj.topic}
+                                    onChange={(e) => handleUpdateTopic(sIdx, bIdx, tIdx, e.target.value)}
+                                    placeholder="Enter topic title..."
+                                    className={cn(plainField, "h-9 min-w-0 flex-1 text-sm font-bold text-white")}
+                                  />
+                                </div>
+                                <span className="shrink-0 rounded border border-orange-500/30 bg-orange-500/10 px-2.5 py-1 text-xs font-bold text-orange-400">
+                                  {plural(countOf([topicObj]), "question")}
+                                </span>
+                                <button type="button" onClick={() => handleAddSubtopic(sIdx, bIdx, tIdx)} className={outlineButton}>
+                                  <Plus className="h-3.5 w-3.5" /> Subtopic
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteTopic(sIdx, bIdx, tIdx)}
+                                  aria-label="Delete topic"
+                                  className="rounded-md p-1.5 text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-300"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+
+                              {/* Subtopic rows */}
+                              <div className="space-y-2 sm:pl-4">
+                                {topicObj.subtopics.map((stObj, stIdx) => (
+                                  <div key={stIdx} className="rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2 transition-colors hover:border-white/15">
+                                    <div className="flex items-center gap-2 sm:gap-3">
+                                      <span className="text-xs font-bold text-orange-400">•</span>
+                                      <Input
+                                        value={stObj.name}
+                                        onChange={(e) => handleUpdateSubtopicName(sIdx, bIdx, tIdx, stIdx, e.target.value)}
+                                        placeholder="Subtopic name..."
+                                        className={cn(plainField, "h-7 min-w-0 flex-1 text-xs font-medium text-zinc-100 focus:text-white")}
+                                      />
+                                      <div className="flex h-7 shrink-0 items-center overflow-hidden rounded-md border border-white/10 bg-white/5">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleUpdateSubtopicCount(sIdx, bIdx, tIdx, stIdx, -1)}
+                                          aria-label="Fewer questions"
+                                          className="h-full px-2 text-xs font-bold text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
+                                        >
+                                          −
+                                        </button>
+                                        <span className="min-w-[2rem] border-x border-white/10 px-2 text-center text-xs font-bold text-orange-400">
+                                          {stObj.allocatedQuestions || 0}
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleUpdateSubtopicCount(sIdx, bIdx, tIdx, stIdx, 1)}
+                                          aria-label="More questions"
+                                          className="h-full px-2 text-xs font-bold text-zinc-400 transition-colors hover:bg-white/10 hover:text-white"
+                                        >
+                                          +
+                                        </button>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteSubtopic(sIdx, bIdx, tIdx, stIdx)}
+                                        aria-label="Delete subtopic"
+                                        className="p-1 text-zinc-500 transition-colors hover:text-red-400"
+                                      >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      </button>
+                                    </div>
+                                    {sourceLookup && <SubtopicSource sourceNodeIds={stObj.sourceNodeIds} sourceLookup={sourceLookup} />}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </section>
+        );
+      })}
     </div>
   );
 }

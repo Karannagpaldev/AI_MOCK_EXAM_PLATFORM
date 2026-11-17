@@ -1,49 +1,78 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ArrowRight, Bell, Loader2, ShieldAlert } from "lucide-react";
+import { ArrowLeft, ArrowRight, Loader2, ShieldAlert, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { useParams, useRouter } from "next/navigation";
 
-import { getExamByIdService, updateExamService } from "../../../../exams/exam.service";
+import { getExamByIdService, updateExamService } from "@/app/teacher/exams/exam.service";
 import { getMyClassroomsService } from "../../../classroom.service";
 import { listGroupsService } from "../../../group.service";
-import { QuestionBuilder } from "../new/QuestionBuilder";
-import { ExamDetailsForm, ExamDetails, EMPTY_EXAM_DETAILS, scheduledDurationMinutes } from "../new/ExamDetailsForm";
-import { WorkspaceShell, StatTile } from "../new/workspace";
+import { QuestionBuilder, AiExamGeneratorForm, WorkspaceParts } from "../new/QuestionBuilder";
+import { PyqFlow } from "../new/PyqFlow";
+import { SourceFlow } from "../new/SourceFlow";
+import {
+  ExamDetailsForm,
+  ExamDetails,
+  EMPTY_EXAM_DETAILS,
+  PLACEHOLDER_EXAM_TITLE,
+  suggestTitleFromSections,
+  publishProblem,
+  examDetailsPayload,
+  AiEvaluationToggle,
+} from "../new/ExamDetailsForm";
+import { WorkspaceShell, CreationMode } from "../new/workspace";
 import QuestionReviewChat from "@/components/QuestionReviewChat";
 import { useExamBuilderStore } from "@/store/useExamBuilderStore";
+import { DateTimeInput } from "@/components/DateTimeInput";
 
-type Phase = "details" | "questions" | "publish";
+// The details students see (title, timing, instructions) live on the publish step, same as when creating an exam.
+type Phase = "questions" | "publish";
 
 const primaryButton = "bg-purple-600 hover:bg-purple-700 text-white h-10 px-6 font-bold text-sm rounded-xl shadow-lg shadow-purple-950/40";
 const ghostButton = "text-gray-400 hover:text-white h-10 px-4 text-sm font-semibold";
-
-function formatDateTime(value: string) {
-  return value ? new Date(value).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "Not set";
-}
 
 export default function EditExamBuilder() {
   const params = useParams();
   const router = useRouter();
   const classroomId = params.id as string;
   const examId = params.examId as string;
-  const { resetStore } = useExamBuilderStore();
+  const { resetStore, isAiMode } = useExamBuilderStore();
 
   const [isMounted, setIsMounted] = useState(false);
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
-  const [phase, setPhase] = useState<Phase>("details");
+  const [phase, setPhase] = useState<Phase>("questions");
+  // Set when the teacher picks a way to add questions to an exam that has none yet.
+  const [buildMode, setBuildMode] = useState<CreationMode | null>(null);
+  // Changing this reloads the question list after one of those ways has added questions.
+  const [builderKey, setBuilderKey] = useState(0);
+
+  // The way of adding questions the teacher picked is only held in the page, so a reload would drop them back on the
+  // picker. It is remembered per exam in this browser until they finish or go back.
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(`edit-build-mode:${examId}`);
+      if (saved === "ai" || saved === "pyq" || saved === "source") setBuildMode(saved);
+    } catch {
+      // Not remembering is harmless.
+    }
+  }, [examId]);
 
   const [details, setDetails] = useState<ExamDetails>(EMPTY_EXAM_DETAILS);
   const [classrooms, setClassrooms] = useState<{ id: string; name: string }[]>([]);
   const [groups, setGroups] = useState<{ id: string; name: string }[]>([]);
+  const [isPublished, setIsPublished] = useState(false);
+  // Made from past papers: those questions are kept exactly as printed, so there is no "Review with AI".
+  const [fromPapers, setFromPapers] = useState(false);
+  const [aiEvaluation, setAiEvaluation] = useState(true);
   const [joinCode, setJoinCode] = useState("");
   const [publishTime, setPublishTime] = useState("");
   const [sections, setSections] = useState<any[]>([]);
+  // The review chat is a full view of its own, opened from the question list, instead of a panel beside it.
+  const [showReview, setShowReview] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -77,16 +106,19 @@ export default function EditExamBuilder() {
           return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
         };
         setDetails({
-          title: data.title || "",
+          // A draft that never got a real title shows an empty field (filled in from the subject on the publish step).
+          title: data.title && data.title !== PLACEHOLDER_EXAM_TITLE ? data.title : "",
           type: data.type === "ON_DEMAND" ? "ON_DEMAND" : "SCHEDULED",
           duration: data.duration?.toString() || "60",
           startTime: toDatetimeLocal(data.startTime),
           endTime: toDatetimeLocal(data.endTime),
           instructions: data.instructions?.length > 0 ? data.instructions : [""],
-          requireFeedback: !!data.requireFeedback,
           allowCoTeacherEdit: !!data.allowCoTeacherEdit,
           groupId: data.groupId || "",
         });
+        setIsPublished(data.status === "PUBLISHED");
+        setFromPapers((data.sourceDocumentIds ?? []).length > 0);
+        setAiEvaluation(data.aiEvaluation !== false);
         if (data.joinCode) setJoinCode(data.joinCode);
         setPublishTime(toDatetimeLocal(data.publishTime));
       })
@@ -106,59 +138,34 @@ export default function EditExamBuilder() {
     [sections]
   );
 
-  const handleSaveDetails = async () => {
-    if (!details.title.trim()) {
-      toast.error("Please enter an exam title");
-      return;
-    }
-    if (details.type === "SCHEDULED" && (!details.startTime || !details.endTime)) {
-      toast.error("Please provide start and end times for scheduled exams");
-      return;
-    }
-    if (details.type === "ON_DEMAND" && !details.duration) {
-      toast.error("Please provide a duration for on-demand exams");
-      return;
-    }
-
-    const payload: any = {
-      title: details.title.trim(),
-      type: details.type,
-      instructions: details.instructions.filter((i) => i.trim() !== ""),
-      requireFeedback: details.requireFeedback,
-      allowCoTeacherEdit: details.allowCoTeacherEdit,
-    };
-    if (details.groupId) payload.groupId = details.groupId;
-    if (details.type === "SCHEDULED") {
-      payload.startTime = new Date(details.startTime).toISOString();
-      payload.endTime = new Date(details.endTime).toISOString();
-    } else {
-      payload.duration = parseInt(details.duration);
-      if (details.startTime) payload.startTime = new Date(details.startTime).toISOString();
-      if (details.endTime) payload.endTime = new Date(details.endTime).toISOString();
-    }
-
-    setIsSaving(true);
-    try {
-      await updateExamService(examId, payload);
-      toast.success("Exam details updated");
-      setPhase("questions");
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || err.message || "Failed to update exam details");
-    } finally {
-      setIsSaving(false);
-    }
+  // Suggest a title from the subject so the teacher rarely has to type one.
+  const goToPublish = () => {
+    setDetails((prev) => (prev.title.trim() ? prev : { ...prev, title: suggestTitleFromSections(sections) }));
+    setPhase("publish");
   };
 
+  // "Save" keeps the exam's current status; a live (published) exam must stay complete, so it's checked like a publish.
   const handleSaveExam = async (status?: "PUBLISHED") => {
-    if (status === "PUBLISHED" && publishTime && details.startTime && new Date(publishTime) >= new Date(details.startTime)) {
-      toast.error("Publish date and time must be before the exam's start time");
-      return;
+    const goingLive = status === "PUBLISHED" || isPublished;
+    if (goingLive) {
+      const problem = publishProblem(details);
+      if (problem) {
+        toast.error(problem);
+        return;
+      }
+      if (publishTime && details.startTime && new Date(publishTime) >= new Date(details.startTime)) {
+        toast.error("Publish date and time must be before the exam's start time");
+        return;
+      }
     }
     setIsSaving(true);
     try {
-      const payload: any = { publishTime: publishTime ? new Date(publishTime).toISOString() : null };
-      if (status) payload.status = status;
-      await updateExamService(examId, payload);
+      await updateExamService(examId, {
+        aiEvaluation,
+        ...examDetailsPayload(details, classroomId),
+        publishTime: publishTime ? new Date(publishTime).toISOString() : null,
+        ...(status ? { status } : {}),
+      });
       toast.success(status ? "Exam published successfully!" : "Changes saved");
       resetStore();
       router.push(`/teacher/classrooms/${classroomId}/exams`);
@@ -169,7 +176,7 @@ export default function EditExamBuilder() {
     }
   };
 
-  if (loadingInitial || !isMounted) return <div className="p-10 text-white text-center">Loading exam...</div>;
+  if (loadingInitial || !isMounted) return <div className="p-4 sm:p-6 md:p-10 text-white text-center">Loading exam...</div>;
 
   if (accessDenied) {
     return (
@@ -194,7 +201,6 @@ export default function EditExamBuilder() {
   }
 
   const phases: { id: Phase; label: string }[] = [
-    { id: "details", label: "Details" },
     { id: "questions", label: "Questions" },
     { id: "publish", label: "Publish" },
   ];
@@ -207,7 +213,7 @@ export default function EditExamBuilder() {
         {phases.map((p, i) => (
           <li key={p.id} className="flex items-center gap-2">
             <button
-              onClick={() => setPhase(p.id)}
+              onClick={() => (p.id === "publish" ? goToPublish() : setPhase(p.id))}
               className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
                 i === currentIndex
                   ? "border-orange-500/60 bg-orange-500/10 text-orange-300"
@@ -225,51 +231,63 @@ export default function EditExamBuilder() {
     </div>
   );
 
+  const buildShell = (parts: WorkspaceParts) => <WorkspaceShell header={header} left={parts.left} right={parts.right} footer={parts.footer} fill={parts.fill} />;
+  const rememberBuildMode = (mode: CreationMode | null) => {
+    setBuildMode(mode);
+    try {
+      if (mode) localStorage.setItem(`edit-build-mode:${examId}`, mode);
+      else localStorage.removeItem(`edit-build-mode:${examId}`);
+    } catch {
+      // Not remembering is harmless.
+    }
+  };
+  const stopBuilding = () => rememberBuildMode(null);
+  const finishBuilding = () => {
+    rememberBuildMode(null);
+    setBuilderKey((k) => k + 1);
+  };
+
   let content: React.ReactNode;
-  if (phase === "details") {
-    content = (
-      <WorkspaceShell
-        header={header}
-        left={
-          <ExamDetailsForm
-            values={details}
-            onChange={(patch) => setDetails((prev) => ({ ...prev, ...patch }))}
-            classrooms={classrooms}
-            selectedClassroomId={classroomId}
-            groups={groups}
-          />
-        }
-        right={
-          <div className="rounded-xl border border-white/10 bg-[#0f0f11] p-4 space-y-2">
-            <h3 className="text-xs font-bold text-gray-300 uppercase tracking-wider">Join code</h3>
-            <p className="text-sm font-mono text-white">{joinCode || "—"}</p>
-          </div>
-        }
-        footer={
-          <>
-            <span className="text-xs text-gray-500">Changes here are saved when you continue</span>
-            <Button onClick={handleSaveDetails} disabled={isSaving} className={primaryButton}>
-              {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <>Next: Questions <ArrowRight className="h-4 w-4 ml-2" /></>}
-            </Button>
-          </>
-        }
-      />
-    );
+  if (phase === "questions" && buildMode === "ai") {
+    content = <AiExamGeneratorForm examId={examId} saveStatus={null} onBack={stopBuilding} onSuccess={finishBuilding} renderShell={buildShell} />;
+  } else if (phase === "questions" && buildMode === "pyq") {
+    content = <PyqFlow examId={examId} onBack={stopBuilding} onSuccess={finishBuilding} renderShell={buildShell} />;
+  } else if (phase === "questions" && buildMode === "source") {
+    content = <SourceFlow examId={examId} onBack={stopBuilding} onSuccess={finishBuilding} renderShell={buildShell} onStepChange={() => {}} />;
   } else if (phase === "questions") {
     content = (
       <WorkspaceShell
         header={header}
-        left={<QuestionBuilder examId={examId} sectionsState={{ sections, setSections }} showReviewAgent={false} />}
-        right={<QuestionReviewChat examId={examId} onSectionsChange={setSections} />}
+        left={
+          showReview ? (
+            <QuestionReviewChat examId={examId} onSectionsChange={setSections} />
+          ) : (
+            <div className="space-y-6">
+              {questionCount > 0 && !isAiMode && !fromPapers && (
+                <div className="flex justify-end">
+                  <Button onClick={() => setShowReview(true)} className="h-10 gap-2 rounded-full bg-orange-600 px-5 text-sm font-semibold text-white hover:bg-orange-700">
+                    <Sparkles className="h-4 w-4" /> Review with AI
+                  </Button>
+                </div>
+              )}
+              <QuestionBuilder key={builderKey} examId={examId} sectionsState={{ sections, setSections }} showReviewAgent={false} onPickMode={rememberBuildMode} />
+            </div>
+          )
+        }
+        fill={showReview}
         footer={
-          <>
-            <Button variant="ghost" onClick={() => setPhase("details")} className={ghostButton}>
-              <ArrowLeft className="h-4 w-4 mr-1.5" /> Back
+          showReview ? (
+            <Button variant="ghost" onClick={() => setShowReview(false)} className={ghostButton}>
+              <ArrowLeft className="h-4 w-4 mr-1.5" /> Back to questions
             </Button>
-            <Button onClick={() => setPhase("publish")} className={primaryButton}>
-              Next: Publish Settings <ArrowRight className="h-4 w-4 ml-2" />
-            </Button>
-          </>
+          ) : (
+            <>
+              <span />
+              <Button onClick={goToPublish} className={primaryButton}>
+                Next: Publish Settings <ArrowRight className="h-4 w-4 ml-2" />
+              </Button>
+            </>
+          )
         }
       />
     );
@@ -278,53 +296,31 @@ export default function EditExamBuilder() {
       <WorkspaceShell
         header={header}
         left={
-          <div className="space-y-5 max-w-2xl">
-            <div>
-              <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                <Bell className="h-5 w-5 text-purple-400" /> Publish settings
-              </h2>
-              <p className="text-xs text-gray-400 mt-0.5">Choose when students can see this exam.</p>
-            </div>
-            <div className="space-y-2 p-5 bg-[#0f0f11] border border-white/10 rounded-xl">
+          <div className="space-y-10">
+            <p className="text-xs text-gray-400">
+              {sections.length} section{sections.length === 1 ? "" : "s"} · {questionCount} question{questionCount === 1 ? "" : "s"} · {totalMarks} marks
+              {joinCode && (
+                <>
+                  {" "}· Join code <span className="font-mono font-semibold text-white">{joinCode}</span>
+                </>
+              )}
+            </p>
+            {/* Only for exams with written questions: MCQs are always marked automatically. */}
+            {sections.some((sec: any) => (sec.questions || []).some((q: any) => q.type === "descriptive")) && (
+              <AiEvaluationToggle value={aiEvaluation} onChange={setAiEvaluation} />
+            )}
+            <ExamDetailsForm
+              values={details}
+              onChange={(patch) => setDetails((prev) => ({ ...prev, ...patch }))}
+              classrooms={classrooms}
+              selectedClassroomId={classroomId}
+              groups={groups}
+            />
+            <div className="space-y-2">
               <label className="text-sm font-semibold text-gray-300">Publish Date & Time</label>
               <p className="text-xs text-gray-500">Students can&apos;t see the exam before this time. Leave blank to publish immediately.</p>
-              <Input
-                type="datetime-local"
-                value={publishTime}
-                onChange={(e) => setPublishTime(e.target.value)}
-                className="bg-[#14151f] border-white/15 text-white h-11 rounded-lg w-full [color-scheme:dark]"
-              />
+              <DateTimeInput value={publishTime} onChange={(v) => setPublishTime(v)} />
             </div>
-          </div>
-        }
-        right={
-          <div className="space-y-4">
-            <div className="rounded-xl border border-white/10 bg-[#0f0f11] p-4 space-y-2">
-              <h3 className="text-sm font-bold text-white truncate">{details.title}</h3>
-              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-xs">
-                <dt className="text-gray-500">Type</dt>
-                <dd className="text-gray-200">{details.type === "SCHEDULED" ? "Scheduled" : "On-demand"}</dd>
-                <dt className="text-gray-500">Starts</dt>
-                <dd className="text-gray-200">{formatDateTime(details.startTime)}</dd>
-                <dt className="text-gray-500">Ends</dt>
-                <dd className="text-gray-200">{formatDateTime(details.endTime)}</dd>
-                <dt className="text-gray-500">Duration</dt>
-                <dd className="text-gray-200">
-                  {details.type === "SCHEDULED" ? scheduledDurationMinutes(details.startTime, details.endTime) : details.duration} min
-                </dd>
-                {joinCode && (
-                  <>
-                    <dt className="text-gray-500">Join code</dt>
-                    <dd className="text-gray-200 font-mono">{joinCode}</dd>
-                  </>
-                )}
-              </dl>
-            </div>
-            <div className="grid grid-cols-2 gap-2.5">
-              <StatTile label="Sections" value={sections.length} />
-              <StatTile label="Questions" value={questionCount} tone="text-purple-300" />
-            </div>
-            <StatTile label="Total marks" value={totalMarks} tone="text-emerald-400" />
           </div>
         }
         footer={
@@ -339,11 +335,13 @@ export default function EditExamBuilder() {
                 disabled={isSaving}
                 className="bg-amber-500/10 text-amber-300 border-amber-500/30 hover:bg-amber-500/20 h-10 text-sm font-semibold"
               >
-                Save
+                {isPublished ? "Save changes" : "Save as Draft"}
               </Button>
-              <Button onClick={() => handleSaveExam("PUBLISHED")} disabled={isSaving} className="bg-green-600 hover:bg-green-700 text-white h-10 px-6 font-bold text-sm rounded-xl">
-                {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : publishTime ? "Schedule & Publish" : "Publish Exam"}
-              </Button>
+              {!isPublished && (
+                <Button onClick={() => handleSaveExam("PUBLISHED")} disabled={isSaving} className="bg-green-600 hover:bg-green-700 text-white h-10 px-6 font-bold text-sm rounded-xl">
+                  {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : publishTime ? "Schedule & Publish" : "Publish Exam"}
+                </Button>
+              )}
             </div>
           </>
         }
@@ -356,16 +354,11 @@ export default function EditExamBuilder() {
       <div className="flex items-center gap-3 shrink-0">
         <button
           onClick={() => router.push(`/teacher/classrooms/${classroomId}/exams`)}
+          aria-label="Back to exams"
           className="flex items-center justify-center p-2 rounded-lg bg-[#18181b] border border-white/10 hover:bg-white/10 hover:text-white transition-colors text-gray-400"
         >
           <ArrowLeft className="h-4 w-4" />
         </button>
-        <h1 className="text-base font-bold text-white tracking-tight">Edit Exam</h1>
-        {joinCode && (
-          <span className="px-2 py-0.5 rounded bg-white/5 text-[10px] font-bold text-gray-400 uppercase tracking-wider border border-white/10">
-            Join code: {joinCode}
-          </span>
-        )}
       </div>
       <div className="flex-1 lg:min-h-0">{content}</div>
     </div>

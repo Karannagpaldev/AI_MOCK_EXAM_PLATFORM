@@ -104,7 +104,7 @@ export function LeaderboardView({
                 Back to Results
               </button>
             </div>
-            <h1 className="text-3xl font-bold text-white flex items-center gap-3">
+            <h1 className="text-2xl sm:text-3xl font-bold text-white flex items-center gap-3">
               Exam Leaderboard — Results
             </h1>
             <p className="text-gray-400 mt-2">
@@ -193,13 +193,13 @@ export function LeaderboardView({
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-orange-400" />
               <Input
                 placeholder="Search by student name..."
-                className="bg-[#14151f] border border-white/15 text-white placeholder:text-zinc-400 focus:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0 focus:border-white/30 h-11 rounded-xl text-sm transition-all shadow-inner pl-10"
+                className="text-white placeholder:text-zinc-400 h-11 text-sm transition-all pl-10"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
 
-            <div className="bg-[#0f0f11] rounded-xl border border-white/5 overflow-hidden">
+            <div className="bg-[#0f0f11] rounded-xl border border-white/5 overflow-x-auto">
               <table className="w-full text-left text-sm text-gray-300">
                 <thead className="bg-[#050505]/50 text-gray-500 text-xs uppercase tracking-wider font-semibold border-b border-white/5">
                   <tr>

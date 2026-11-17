@@ -103,7 +103,7 @@ export default function StudentClassroomAssignmentsPage() {
     setStatus("live");
   };
 
-  if (loading) return <div className="text-gray-400 text-center py-10">Loading...</div>;
+  if (loading) return <div className="text-gray-400 text-center py-6 sm:py-8 md:py-10">Loading...</div>;
 
   if (view === "landing") {
     return (
@@ -114,7 +114,7 @@ export default function StudentClassroomAssignmentsPage() {
         </div>
 
         {assignments.length === 0 ? (
-          <Card className="bg-[#0f0f11] border-white/5 py-10 text-center">
+          <Card className="bg-[#0f0f11] border-white/5 py-6 sm:py-8 md:py-10 text-center">
             <CardContent>
               <ClipboardList className="h-8 w-8 text-gray-500 mx-auto mb-3" />
               <p className="text-gray-400">No assignments available yet.</p>
@@ -171,7 +171,7 @@ export default function StudentClassroomAssignmentsPage() {
           type="text"
           placeholder="Search assignments..."
           value={search}
-          onChange={(e) => setSearch(e.target.value)} className="bg-[#14151f] border border-white/15 text-white placeholder:text-zinc-400 focus:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0 focus:border-white/30 h-11 rounded-xl text-sm transition-all shadow-inner pl-10"
+          onChange={(e) => setSearch(e.target.value)} className="text-white placeholder:text-zinc-400 h-11 text-sm transition-all pl-10 border-b transition-colors placeholder:text-zinc-500 rounded-none border-0 border-white/20 bg-transparent px-0 focus:border-orange-500 focus:outline-none focus:ring-0"
         />
       </div>
 
@@ -197,7 +197,7 @@ export default function StudentClassroomAssignmentsPage() {
       </div>
 
       {visible.length === 0 ? (
-        <Card className="bg-[#0f0f11] border-white/5 py-10 text-center">
+        <Card className="bg-[#0f0f11] border-white/5 py-6 sm:py-8 md:py-10 text-center">
           <CardContent>
             <ClipboardList className="h-8 w-8 text-gray-500 mx-auto mb-3" />
             <p className="text-gray-400">No {status} assignments here.</p>
@@ -218,10 +218,10 @@ export default function StudentClassroomAssignmentsPage() {
                     <span
                       className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border shrink-0 ${
                         a.submissionStatus === "submitted" || a.submissionStatus === "graded"
-                          ? "bg-[#18181b]merald-600/10 text-emerald-400 border-emerald-500/20"
+                          ? "bg-emerald-600/10 text-emerald-400 border-emerald-500/20"
                           : a.submissionStatus === "evaluating"
                           ? "bg-orange-500/10 text-orange-400 border-orange-500/30 animate-pulse"
-                          : "bg-[#18181b]mber-500/10 text-amber-400 border-amber-500/20"
+                          : "bg-amber-500/10 text-amber-400 border-amber-500/20"
                       }`}
                     >
                       {a.submissionStatus === "submitted" || a.submissionStatus === "graded"
@@ -242,7 +242,7 @@ export default function StudentClassroomAssignmentsPage() {
                   </p>
                   <div className="flex gap-3">
                     <div className="flex flex-col items-center">
-                      <span className="h-2 w-2 rounded-full bg-[#18181b]merald-400 shrink-0" />
+                      <span className="h-2 w-2 rounded-full bg-emerald-400 shrink-0" />
                       <span className="w-px flex-1 bg-white/10 my-1" />
                       <span className="h-2 w-2 rounded-full bg-red-400 shrink-0" />
                     </div>
@@ -260,7 +260,7 @@ export default function StudentClassroomAssignmentsPage() {
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-[#18181b]merald-600/10 text-emerald-400 border border-emerald-500/20">
+                  <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-600/10 text-emerald-400 border border-emerald-500/20">
                     {a.totalMarks} marks
                   </span>
                   <Button

@@ -6,8 +6,32 @@ export const getMyOrganisationTeachersService = async (search?: string) => {
   return res.data;
 };
 
-export const assignTeacherToMyOrganisationService = async (email: string) => {
-  const res = await api.post("/organisations/mine/teachers", { email });
+export interface TeacherInvite {
+  id: string;
+  email: string;
+  status: "pending" | "accepted" | "declined" | "revoked" | "expired";
+  expiresAt: string;
+  createdAt: string;
+  respondedAt: string | null;
+}
+
+export const inviteTeacherService = async (email: string) => {
+  const res = await api.post("/organisations/mine/invites", { email });
+  return res.data;
+};
+
+export const getMyInvitesService = async (): Promise<TeacherInvite[]> => {
+  const res = await api.get("/organisations/mine/invites");
+  return res.data.data ?? [];
+};
+
+export const resendInviteService = async (inviteId: string) => {
+  const res = await api.post(`/organisations/mine/invites/${inviteId}/resend`);
+  return res.data;
+};
+
+export const revokeInviteService = async (inviteId: string) => {
+  const res = await api.delete(`/organisations/mine/invites/${inviteId}`);
   return res.data;
 };
 

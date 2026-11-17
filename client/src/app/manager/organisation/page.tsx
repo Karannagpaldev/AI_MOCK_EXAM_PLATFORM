@@ -134,12 +134,12 @@ export default function ManagerOrganisationPage() {
     }
   };
 
-  if (loading) return <div className="p-10 text-white text-center">Loading organisation details...</div>;
+  if (loading) return <div className="p-4 sm:p-6 md:p-10 text-white text-center">Loading organisation details...</div>;
 
   return (
-    <div className="p-10 h-full overflow-y-auto custom-scrollbar">
+    <div className="p-4 sm:p-6 md:p-10 h-full overflow-y-auto custom-scrollbar">
       <div className="mb-8">
-        <h2 className="text-3xl font-bold text-white tracking-tight">Organisation</h2>
+        <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Organisation</h2>
         <p className="text-gray-400 mt-1">Manage your organisation's public details and branding.</p>
       </div>
 
@@ -156,7 +156,7 @@ export default function ManagerOrganisationPage() {
               <input
                 value={form.name}
                 onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                className="w-full bg-[#09090b] border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-gray-600 focus:outline-none focus:ring-1 focus:ring-white/30 transition-all"
+                className="w-full py-3 text-white placeholder:text-gray-600 transition-all border-b transition-colors placeholder:text-zinc-500 rounded-none border-0 border-white/20 bg-transparent px-0 focus:border-orange-500 focus:outline-none focus:ring-0"
               />
             </div>
 
@@ -168,7 +168,7 @@ export default function ManagerOrganisationPage() {
                 type="email"
                 value={form.contactEmail}
                 onChange={e => setForm(f => ({ ...f, contactEmail: e.target.value }))}
-                className="w-full bg-[#09090b] border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-gray-600 focus:outline-none focus:ring-1 focus:ring-white/30 transition-all"
+                className="w-full py-3 text-white placeholder:text-gray-600 transition-all border-b transition-colors placeholder:text-zinc-500 rounded-none border-0 border-white/20 bg-transparent px-0 focus:border-orange-500 focus:outline-none focus:ring-0"
               />
             </div>
 
@@ -179,7 +179,7 @@ export default function ManagerOrganisationPage() {
               <input
                 value={form.phone}
                 onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
-                className="w-full bg-[#09090b] border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-gray-600 focus:outline-none focus:ring-1 focus:ring-white/30 transition-all"
+                className="w-full py-3 text-white placeholder:text-gray-600 transition-all border-b transition-colors placeholder:text-zinc-500 rounded-none border-0 border-white/20 bg-transparent px-0 focus:border-orange-500 focus:outline-none focus:ring-0"
               />
             </div>
 

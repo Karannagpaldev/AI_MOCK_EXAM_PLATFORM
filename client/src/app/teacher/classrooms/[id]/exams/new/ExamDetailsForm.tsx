@@ -5,7 +5,10 @@ import { Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { DateTimeInput } from "@/components/DateTimeInput";
 
 export type ExamDetails = {
   title: string;
@@ -14,7 +17,6 @@ export type ExamDetails = {
   startTime: string;
   endTime: string;
   instructions: string[];
-  requireFeedback: boolean;
   allowCoTeacherEdit: boolean;
   groupId: string;
 };
@@ -26,7 +28,6 @@ export const EMPTY_EXAM_DETAILS: ExamDetails = {
   startTime: "",
   endTime: "",
   instructions: [""],
-  requireFeedback: false,
   allowCoTeacherEdit: false,
   groupId: "",
 };
@@ -37,8 +38,51 @@ export function scheduledDurationMinutes(startTime: string, endTime: string): nu
   return diff > 0 ? diff : 0;
 }
 
-const inputClass = "bg-[#14151f] border border-white/15 text-white placeholder:text-zinc-500 h-11 rounded-lg focus-visible:ring-orange-500/40";
-const labelClass = "text-sm font-semibold text-gray-300";
+// An exam is created as a draft the moment a teacher picks how to build it, before any details are known. It carries
+// this title until the teacher sets one on the publish step.
+export const PLACEHOLDER_EXAM_TITLE = "Untitled exam";
+
+// "C++ Exam" from the first subject in the exam's sections, or "" when there is none yet.
+export function suggestTitleFromSections(sections: any[]): string {
+  const subject = sections.flatMap((s) => s.blocks || []).find((b: any) => b.subject?.trim())?.subject?.trim();
+  return subject ? `${subject} Exam` : "";
+}
+
+// What has to be filled in before students can see the exam. Null when it's ready.
+export function publishProblem(details: ExamDetails): string | null {
+  if (!details.title.trim() || details.title.trim() === PLACEHOLDER_EXAM_TITLE) return "Please enter an exam title";
+  if (details.type === "SCHEDULED" && (!details.startTime || !details.endTime)) return "Please provide start and end times for scheduled exams";
+  if (details.type === "SCHEDULED" && new Date(details.endTime) <= new Date(details.startTime)) return "The end time must be after the start time";
+  if (details.type === "ON_DEMAND" && !Number(details.duration)) return "Please provide a duration for on-demand exams";
+  return null;
+}
+
+// The exam fields to save from the form. Times are only sent when set, so a draft can be saved half-filled.
+export function examDetailsPayload(details: ExamDetails, classroomId?: string): Record<string, unknown> {
+  const payload: Record<string, unknown> = {
+    title: details.title.trim() || PLACEHOLDER_EXAM_TITLE,
+    type: details.type,
+    instructions: details.instructions.filter((i) => i.trim() !== ""),
+    allowCoTeacherEdit: details.allowCoTeacherEdit,
+  };
+  // A group always belongs to a classroom, so the server needs both together.
+  if (details.groupId && classroomId) {
+    payload.groupId = details.groupId;
+    payload.classroomId = classroomId;
+  }
+  if (details.type === "ON_DEMAND" && Number(details.duration)) payload.duration = parseInt(details.duration);
+  if (details.startTime) payload.startTime = new Date(details.startTime).toISOString();
+  if (details.endTime) payload.endTime = new Date(details.endTime).toISOString();
+  return payload;
+}
+
+const inputClass = "text-white placeholder:text-zinc-500 h-11";
+const labelClass = "text-sm font-semibold text-gray-200";
+
+const EXAM_TYPES: { value: ExamDetails["type"]; label: string }[] = [
+  { value: "SCHEDULED", label: "Fixed Time" },
+  { value: "ON_DEMAND", label: "Flexible" },
+];
 
 export function ExamDetailsForm({
   values,
@@ -58,7 +102,10 @@ export function ExamDetailsForm({
   return (
     <div className="space-y-6 max-w-3xl">
       <div>
-        <h2 className="text-lg font-bold text-white">Exam details</h2>
+        <h2 className="flex items-center gap-2 text-lg font-bold text-white">
+          <span aria-hidden className="h-4 w-1 shrink-0 rounded-full bg-orange-500" />
+          Exam details
+        </h2>
         <p className="text-xs text-gray-400 mt-0.5">Basic information students will see.</p>
       </div>
 
@@ -70,7 +117,7 @@ export function ExamDetailsForm({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
         <div className="space-y-2">
           <label className={labelClass}>Classroom</label>
-          <select value={selectedClassroomId} disabled className="w-full bg-[#050505]/50 border border-white/5 text-gray-400 h-11 rounded-lg px-3 text-sm cursor-not-allowed">
+          <select value={selectedClassroomId} disabled className="w-full text-gray-400 h-11 text-sm cursor-not-allowed border-b transition-colors placeholder:text-zinc-500 rounded-none border-0 border-white/20 bg-transparent px-0 focus:border-orange-500 focus:outline-none focus:ring-0 [color-scheme:dark] [&>option]:bg-[#18181b] [&>option]:text-white">
             {classrooms.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -85,7 +132,7 @@ export function ExamDetailsForm({
             value={values.groupId}
             onChange={(e) => onChange({ groupId: e.target.value })}
             disabled={!selectedClassroomId}
-            className="w-full bg-[#14151f] border border-white/15 text-white h-11 rounded-lg px-3 text-sm focus:outline-none focus:ring-1 focus:ring-orange-500/40 disabled:opacity-50"
+            className="w-full text-white h-11 text-sm disabled:opacity-50 border-b transition-colors placeholder:text-zinc-500 rounded-none border-0 border-white/20 bg-transparent px-0 focus:border-orange-500 focus:outline-none focus:ring-0 [color-scheme:dark] [&>option]:bg-[#18181b] [&>option]:text-white"
           >
             <option value="">Class-wide (all students)</option>
             {groups.map((g) => (
@@ -100,47 +147,35 @@ export function ExamDetailsForm({
 
       <div className="space-y-2">
         <label className={labelClass}>Exam Type</label>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {(
-            [
-              ["SCHEDULED", "Scheduled (Fixed Time)"],
-              ["ON_DEMAND", "On-Demand (Flexible)"],
-            ] as const
-          ).map(([value, label]) => (
-            <Button
-              key={value}
-              type="button"
-              variant="outline"
-              onClick={() => onChange({ type: value })}
-              className={cn(
-                "h-11 border-2 font-bold text-sm rounded-xl flex items-center justify-center gap-2.5",
-                values.type === value
-                  ? "bg-orange-600 hover:bg-orange-700 text-white border-orange-400 ring-2 ring-orange-500/30"
-                  : "bg-[#14151f] border-white/15 text-zinc-400 hover:bg-[#1a1b2a] hover:text-white"
-              )}
-            >
-              <span className={cn("w-2.5 h-2.5 rounded-full", values.type === value ? "bg-white" : "bg-zinc-600")} />
-              {label}
-            </Button>
-          ))}
-        </div>
+        <Select value={values.type} onValueChange={(v) => onChange({ type: v as ExamDetails["type"] })}>
+          <SelectTrigger className="w-full">
+            <SelectValue>{(v: string) => EXAM_TYPES.find((t) => t.value === v)?.label ?? v}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {EXAM_TYPES.map((t) => (
+              <SelectItem key={t.value} value={t.value}>
+                {t.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
         <div className="space-y-2">
           <label className={labelClass}>{values.type === "SCHEDULED" ? "Start Time" : "Window Start"}</label>
-          <Input type="datetime-local" value={values.startTime} onChange={(e) => onChange({ startTime: e.target.value })} className={cn(inputClass, "[color-scheme:dark]")} />
+          <DateTimeInput value={values.startTime} onChange={(v) => onChange({ startTime: v })} />
         </div>
         <div className="space-y-2">
           <label className={labelClass}>{values.type === "SCHEDULED" ? "End Time" : "Window End"}</label>
-          <Input type="datetime-local" value={values.endTime} onChange={(e) => onChange({ endTime: e.target.value })} className={cn(inputClass, "[color-scheme:dark]")} />
+          <DateTimeInput value={values.endTime} onChange={(v) => onChange({ endTime: v })} />
         </div>
       </div>
 
       <div className="space-y-2">
         <label className={labelClass}>Duration (Minutes)</label>
         {values.type === "SCHEDULED" ? (
-          <Input value={calculatedDuration} readOnly className="bg-[#14151f]/50 border border-white/10 text-gray-400 h-11 rounded-lg cursor-not-allowed" />
+          <Input value={calculatedDuration} readOnly className="text-gray-400 h-11 cursor-not-allowed" />
         ) : (
           <Input type="number" value={values.duration} onChange={(e) => onChange({ duration: e.target.value })} placeholder="60" className={inputClass} />
         )}
@@ -173,19 +208,11 @@ export function ExamDetailsForm({
           <Button
             variant="outline"
             onClick={() => onChange({ instructions: [...values.instructions, ""] })}
-            className="w-full bg-transparent border-dashed border-white/10 text-gray-400 hover:text-white hover:bg-white/5"
+            className="w-full bg-transparent border-dashed border-orange-500/30 text-orange-400 hover:text-orange-300 hover:bg-orange-500/10"
           >
             <Plus className="h-4 w-4 mr-2" /> Add Instruction
           </Button>
         </div>
-      </div>
-
-      <div className="flex items-center justify-between gap-4 p-4 bg-[#050505] border border-white/10 rounded-lg">
-        <div className="space-y-0.5">
-          <label className={labelClass}>Require Feedback Form</label>
-          <p className="text-xs text-gray-500">Ask students for feedback after they submit the exam.</p>
-        </div>
-        <Switch checked={values.requireFeedback} onCheckedChange={(v) => onChange({ requireFeedback: v })} />
       </div>
 
       <div className="flex items-center justify-between gap-4 p-4 bg-[#050505] border border-white/10 rounded-lg">
@@ -195,6 +222,68 @@ export function ExamDetailsForm({
         </div>
         <Switch checked={values.allowCoTeacherEdit} onCheckedChange={(v) => onChange({ allowCoTeacherEdit: v })} />
       </div>
+    </div>
+  );
+}
+
+/**
+ * "Evaluate written answers with AI". On: the AI marks written answers when students submit, and the teacher can change any
+ * mark. Off: the teacher grades them. MCQs are marked automatically either way, by comparing with the correct option.
+ */
+export function AiEvaluationToggle({ value, onChange }: { value: boolean; onChange: (value: boolean) => void }) {
+  return (
+    <div className="flex items-start justify-between gap-4 border-b border-white/10 pb-4">
+      <div className="min-w-0 space-y-0.5">
+        <label htmlFor="ai-evaluation" className={labelClass}>
+          Evaluate written answers with AI
+        </label>
+        <p className="text-xs text-gray-400">
+          {value
+            ? "The AI marks written answers when students submit. You can change any mark afterwards."
+            : "You'll grade written answers yourself from the results page. MCQs are still marked automatically."}
+        </p>
+      </div>
+      <Switch id="ai-evaluation" checked={value} onCheckedChange={(checked) => onChange(!!checked)} />
+    </div>
+  );
+}
+
+/**
+ * The switch above, plus (while it is on) the teacher's marking scheme in their own words: the grading guide of each
+ * written question is prepared from it. Shown on the publish step of exams and assignments that have written questions.
+ */
+export function AiEvaluationSettings({
+  value,
+  onChange,
+  scheme,
+  onSchemeChange,
+}: {
+  value: boolean;
+  onChange: (value: boolean) => void;
+  scheme: string;
+  onSchemeChange: (scheme: string) => void;
+}) {
+  return (
+    <div className="space-y-5">
+      <AiEvaluationToggle value={value} onChange={onChange} />
+      {value && (
+        <div className="space-y-2">
+          <label htmlFor="evaluation-scheme" className="text-sm font-semibold text-gray-300">How should students answer, and how will you evaluate?</label>
+          <p className="text-xs text-gray-500">
+            Optional. For example: &quot;For 5 marks, a definition, an explanation and one example. Don&apos;t deduct for spelling.&quot; The grading guide for each written question is
+            prepared from this after you save. Leave blank to use the standard guide.
+          </p>
+          <Textarea
+            id="evaluation-scheme"
+            value={scheme}
+            onChange={(e) => onSchemeChange(e.target.value)}
+            maxLength={4000}
+            rows={4}
+            placeholder="Describe how you check answers…"
+            className="text-white placeholder:text-zinc-500"
+          />
+        </div>
+      )}
     </div>
   );
 }

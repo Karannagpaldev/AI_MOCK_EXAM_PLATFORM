@@ -66,13 +66,13 @@ export default function StudentClassroomsPage() {
     }
   };
 
-  if (loading) return <div className="p-10 text-white text-center">Loading classrooms...</div>;
+  if (loading) return <div className="p-4 sm:p-6 md:p-10 text-white text-center">Loading classrooms...</div>;
 
   return (
-    <div className="p-10 h-full overflow-y-auto custom-scrollbar">
-      <div className="flex items-center justify-between mb-8">
+    <div className="p-4 sm:p-6 md:p-10 h-full overflow-y-auto custom-scrollbar">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
-          <h2 className="text-3xl font-bold text-white tracking-tight">Classrooms</h2>
+          <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Classrooms</h2>
           <p className="text-gray-400 mt-1">Classrooms you've joined.</p>
         </div>
         <Button className="bg-orange-600 hover:bg-orange-700 text-white font-semibold" onClick={() => setDialogOpen(true)}>
@@ -137,7 +137,7 @@ export default function StudentClassroomsPage() {
               value={code}
               onChange={(e) => setCode(e.target.value.toUpperCase())}
               onKeyDown={(e) => e.key === "Enter" && handleJoin()}
-              className="w-full bg-[#09090b] border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-gray-600 focus:outline-none focus:ring-1 focus:ring-white/30 transition-all text-center text-xl tracking-widest font-mono uppercase"
+              className="w-full py-3 text-white placeholder:text-gray-600 transition-all text-center text-xl tracking-widest font-mono uppercase border-b transition-colors placeholder:text-zinc-500 rounded-none border-0 border-white/20 bg-transparent px-0 focus:border-orange-500 focus:outline-none focus:ring-0"
             />
             <p className="text-xs text-gray-500">
               Works with either a shared classroom code or a personal invite code emailed to you.

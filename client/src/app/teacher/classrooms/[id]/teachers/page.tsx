@@ -94,7 +94,7 @@ export default function TeachersPage() {
               placeholder="Search teachers..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-[#14151f] border border-white/15 text-white placeholder:text-zinc-400 focus:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0 focus:border-white/30 h-11 rounded-xl text-sm transition-all shadow-inner pl-10"
+              className="w-full text-white placeholder:text-zinc-400 h-11 text-sm transition-all pl-10 rounded-none border-0 border-b border-white/20 bg-transparent px-0 transition-colors placeholder:text-zinc-500 focus:border-orange-500 focus:outline-none focus:ring-0"
             />
           </div>
 
@@ -150,7 +150,7 @@ export default function TeachersPage() {
               value={teacherEmail}
               onChange={(e) => setTeacherEmail(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleAddTeacher()}
-              className="flex-1 bg-[#0f0f11] border border-white/10 text-white placeholder:text-gray-500 rounded-lg px-4 py-2.5 focus:outline-none focus:border-white/20 transition-all text-sm"
+              className="flex-1 text-white placeholder:text-gray-500 py-2.5 transition-all text-sm rounded-none border-0 border-b border-white/20 bg-transparent px-0 transition-colors placeholder:text-zinc-500 focus:border-orange-500 focus:outline-none focus:ring-0"
             />
             <Button className="bg-orange-600 hover:bg-orange-700 text-white shrink-0" onClick={handleAddTeacher} disabled={addingTeacher}>
               {addingTeacher ? "Adding..." : "Add"}

@@ -68,7 +68,7 @@ export default function ClassroomSettingsPage() {
               value={nameInput}
               onChange={(e) => setNameInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSaveName()}
-              className="flex-1 bg-[#09090b] border border-white/10 rounded-xl px-4 py-2.5 text-white text-base focus:outline-none focus:ring-1 focus:ring-white/30 transition-all"
+              className="flex-1 py-2.5 text-white text-base transition-all rounded-none border-0 border-b border-white/20 bg-transparent px-0 transition-colors placeholder:text-zinc-500 focus:border-orange-500 focus:outline-none focus:ring-0"
             />
             <Button className="bg-orange-600 hover:bg-orange-700 text-white shrink-0" onClick={handleSaveName} disabled={savingName}>
               {savingName ? "Saving..." : "Save"}

@@ -89,10 +89,10 @@ export default function ClassroomsPage() {
   };
 
   return (
-    <div className="p-10 h-full overflow-y-auto custom-scrollbar">
-      <div className="flex items-center justify-between mb-8">
+    <div className="p-4 sm:p-6 md:p-10 h-full overflow-y-auto custom-scrollbar">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
-          <h2 className="text-3xl font-bold text-white tracking-tight">Classrooms</h2>
+          <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Classrooms</h2>
           <p className="text-gray-400 mt-1">Manage your classrooms, rosters, and join codes.</p>
         </div>
         <Button
@@ -110,12 +110,12 @@ export default function ClassroomsPage() {
           type="text"
           placeholder="Search classrooms..."
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-[#14151f] border border-white/15 text-white placeholder:text-zinc-400 focus:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0 focus:border-white/30 h-11 rounded-xl text-sm transition-all shadow-inner pl-10"
+          onChange={(e) => setSearchQuery(e.target.value)} className="w-full text-white placeholder:text-zinc-400 h-11 text-sm transition-all pl-10 border-b transition-colors placeholder:text-zinc-500 rounded-none border-0 border-white/20 bg-transparent px-0 focus:border-orange-500 focus:outline-none focus:ring-0"
         />
       </div>
 
       {loading ? (
-        <div className="text-white text-center py-10">Loading classrooms...</div>
+        <div className="text-white text-center py-6 sm:py-8 md:py-10">Loading classrooms...</div>
       ) : classrooms.length === 0 ? (
         <Card className="bg-[#0f0f11]/50 border-white/5 py-16 text-center">
           <CardContent className="flex flex-col items-center">
@@ -187,7 +187,7 @@ export default function ClassroomsPage() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-              className="w-full bg-[#09090b] border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-gray-600 focus:outline-none focus:ring-1 focus:ring-white/30 transition-all"
+              className="w-full py-3 text-white placeholder:text-gray-600 transition-all border-b transition-colors placeholder:text-zinc-500 rounded-none border-0 border-white/20 bg-transparent px-0 focus:border-orange-500 focus:outline-none focus:ring-0"
             />
             <p className="text-xs text-gray-500">
               A join code will be generated automatically (7-day expiry, 300 uses) — you can regenerate or revoke it anytime.

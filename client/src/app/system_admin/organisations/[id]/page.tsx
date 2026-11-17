@@ -193,11 +193,11 @@ export default function OrganisationDetailPage() {
   const usageFor = (metric: string) => usage.find(u => u.metric === metric)?.count || 0;
   const usagePct = (used: number, limit: number) => (limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0);
 
-  if (loading) return <div className="p-10 text-white text-center">Loading organisation...</div>;
-  if (!organisation) return <div className="p-10 text-white text-center">Organisation not found</div>;
+  if (loading) return <div className="p-4 sm:p-6 md:p-10 text-white text-center">Loading organisation...</div>;
+  if (!organisation) return <div className="p-4 sm:p-6 md:p-10 text-white text-center">Organisation not found</div>;
 
   return (
-    <div className="p-10 h-full overflow-y-auto custom-scrollbar">
+    <div className="p-4 sm:p-6 md:p-10 h-full overflow-y-auto custom-scrollbar">
       <button
         onClick={() => router.push("/system_admin/organisations")}
         className="flex items-center gap-2 text-gray-400 hover:text-white text-sm mb-6 transition-colors"
@@ -206,7 +206,7 @@ export default function OrganisationDetailPage() {
       </button>
 
       <div className="mb-8">
-        <h2 className="text-3xl font-bold text-white tracking-tight">{organisation.name}</h2>
+        <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">{organisation.name}</h2>
         <p className="text-gray-400 mt-1">Manage this organisation's owners (managers).</p>
       </div>
 
@@ -225,7 +225,7 @@ export default function OrganisationDetailPage() {
               value={managerEmail}
               onChange={(e) => setManagerEmail(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleAssignManager()}
-              className="flex-1 bg-[#09090b] border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder:text-gray-600 focus:outline-none focus:ring-1 focus:ring-white/30 transition-all text-sm"
+              className="flex-1 py-2.5 text-white placeholder:text-gray-600 transition-all text-sm border-b transition-colors placeholder:text-zinc-500 rounded-none border-0 border-white/20 bg-transparent px-0 focus:border-orange-500 focus:outline-none focus:ring-0"
             />
             <Button className="bg-red-600 hover:bg-red-500 text-white shrink-0" onClick={handleAssignManager} disabled={assigning}>
               {assigning ? "Assigning..." : "Assign Manager"}
@@ -308,12 +308,12 @@ export default function OrganisationDetailPage() {
           type="text"
           placeholder="Search managers by name or email..."
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)} className="bg-[#14151f] border border-white/15 text-white placeholder:text-zinc-400 focus:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0 focus:border-white/30 h-11 rounded-xl text-sm transition-all shadow-inner pl-10"
+          onChange={(e) => setSearchQuery(e.target.value)} className="text-white placeholder:text-zinc-400 h-11 text-sm transition-all pl-10 border-b transition-colors placeholder:text-zinc-500 rounded-none border-0 border-white/20 bg-transparent px-0 focus:border-orange-500 focus:outline-none focus:ring-0"
         />
       </div>
 
       {managers.length === 0 ? (
-        <Card className="bg-[#0f0f11]/50 border-white/5 py-10 text-center">
+        <Card className="bg-[#0f0f11]/50 border-white/5 py-6 sm:py-8 md:py-10 text-center">
           <CardContent>
             <Crown className="h-8 w-8 text-gray-500 mx-auto mb-3" />
             <p className="text-gray-400">
@@ -380,7 +380,7 @@ export default function OrganisationDetailPage() {
                       min={0}
                       value={customLimits[key]}
                       onChange={(e) => setCustomLimits(f => ({ ...f, [key]: Number(e.target.value) || 0 }))}
-                      className="w-full mt-1 bg-[#09090b] border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder:text-gray-600 focus:outline-none focus:ring-1 focus:ring-white/30 transition-all text-sm"
+                      className="w-full mt-1 py-2.5 text-white placeholder:text-gray-600 transition-all text-sm border-b transition-colors placeholder:text-zinc-500 rounded-none border-0 border-white/20 bg-transparent px-0 focus:border-orange-500 focus:outline-none focus:ring-0"
                     />
                   </div>
                 ))}

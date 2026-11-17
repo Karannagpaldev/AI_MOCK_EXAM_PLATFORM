@@ -12,6 +12,7 @@ import { Eye, EyeOff, ArrowLeft } from 'lucide-react';
 
 import { loginService, verifyOtpService, resendOtpService } from '../auth.service';
 import { useAuthStore } from '@/store/authStore';
+import { readRedirect, withRedirect } from '@/lib/redirect';
 
 const loginSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
@@ -25,6 +26,9 @@ export default function LoginPage() {
   const setUser = useAuthStore(state => state.setUser);
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  // Set when someone was sent here from another page (the invitation page), so they can be sent back after signing in.
+  const [redirect, setRedirect] = useState<string | null>(null);
+  useEffect(() => setRedirect(readRedirect()), []);
 
   // Verification step state (for accounts that registered but never verified)
   const [step, setStep] = useState<'LOGIN' | 'VERIFY'>('LOGIN');
@@ -60,6 +64,12 @@ export default function LoginPage() {
 
       setUser(userData, token);
       toast.success("Successfully logged in");
+
+      const back = readRedirect();
+      if (back) {
+        router.push(back);
+        return;
+      }
 
       if (userData?.role === "system_admin") {
         router.push('/system_admin');
@@ -149,7 +159,7 @@ export default function LoginPage() {
               placeholder="123456"
               value={verifyOtp}
               onChange={(e) => setVerifyOtp(e.target.value.replace(/\D/g, ""))}
-              className="w-full bg-[#14151f] border border-white/15 rounded-xl px-4 py-3 text-white placeholder:text-zinc-400 focus:outline-none focus:ring-1 focus:ring-orange-500/40 transition-all text-center text-2xl tracking-widest font-semibold"
+              className="w-full py-3 text-white placeholder:text-zinc-400 transition-all text-center text-2xl tracking-widest font-semibold border-b transition-colors placeholder:text-zinc-500 rounded-none border-0 border-b border-white/20 bg-transparent px-0 focus:border-orange-500 focus:border-b-2 focus:outline-none focus:ring-0"
             />
           </div>
 
@@ -207,7 +217,7 @@ export default function LoginPage() {
             id="email"
             type="email"
             placeholder="name@university.edu"
-            className="w-full bg-[#14151f] border border-white/15 rounded-xl px-4 py-3 text-white placeholder:text-zinc-400 focus:outline-none focus:ring-1 focus:ring-orange-500/40 transition-all"
+            className="w-full py-3 text-white placeholder:text-zinc-400 transition-colors border-b placeholder:text-zinc-500 rounded-none border-0 border-b border-white/20 bg-transparent px-0 focus:border-orange-500 focus:border-b-2 focus:outline-none focus:ring-0"
             {...register('email')}
           />
           {errors.email && (
@@ -227,7 +237,7 @@ export default function LoginPage() {
               id="password"
               type={showPassword ? "text" : "password"}
               placeholder="••••••••"
-              className="w-full bg-[#14151f] border border-white/15 rounded-xl px-4 py-3 text-white placeholder:text-zinc-400 focus:outline-none focus:ring-1 focus:ring-orange-500/40 transition-all pr-12"
+              className="w-full py-3 text-white placeholder:text-zinc-400 transition-colors pr-12 border-b placeholder:text-zinc-500 rounded-none border-0 border-b border-white/20 bg-transparent px-0 focus:border-orange-500 focus:border-b-2 focus:outline-none focus:ring-0"
               {...register('password')}
             />
             <button
@@ -262,7 +272,7 @@ export default function LoginPage() {
 
       <div className="text-center text-sm text-gray-400">
         Don't have an account?{' '}
-        <Link href="/auth/register" className="text-orange-400 font-semibold hover:text-orange-300 hover:underline transition-colors">
+        <Link href={withRedirect("/auth/register", redirect)} className="text-orange-400 font-semibold hover:text-orange-300 hover:underline transition-colors">
           Create one now
         </Link>
       </div>

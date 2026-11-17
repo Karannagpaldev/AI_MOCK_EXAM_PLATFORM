@@ -71,20 +71,20 @@ export function StudentProfileView() {
     })();
   }, [studentId]);
 
-  if (loading) return <div className="p-10 text-white text-center flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Loading student profile...</div>;
-  if (!profile) return <div className="p-10 text-white text-center">Student profile not found</div>;
+  if (loading) return <div className="p-4 sm:p-6 md:p-10 text-white text-center flex items-center justify-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Loading student profile...</div>;
+  if (!profile) return <div className="p-4 sm:p-6 md:p-10 text-white text-center">Student profile not found</div>;
 
   const { student, stats } = profile;
   const examPct = stats.maxExamMarks > 0 ? Math.round((stats.totalExamScore / stats.maxExamMarks) * 100) : 0;
   const assignPct = stats.maxAssignmentMarks > 0 ? Math.round((stats.totalAssignmentScore / stats.maxAssignmentMarks) * 100) : 0;
 
   return (
-    <div className="p-10 h-full overflow-y-auto custom-scrollbar">
+    <div className="p-4 sm:p-6 md:p-10 h-full overflow-y-auto custom-scrollbar">
       {/* Student header */}
       <Card className="bg-gradient-to-br from-[#1a1a1f] to-[#0f0f11] border-white/10 mb-6">
         <CardContent className="pt-6 flex flex-col sm:flex-row items-center sm:items-center gap-5">
           <div className="h-20 w-20 rounded-2xl bg-orange-600/20 border border-orange-500/30 flex items-center justify-center shrink-0">
-            <span className="text-3xl font-bold text-orange-400">{student.name?.[0]?.toUpperCase() || "S"}</span>
+            <span className="text-2xl sm:text-3xl font-bold text-orange-400">{student.name?.[0]?.toUpperCase() || "S"}</span>
           </div>
           <div className="flex-1 text-center sm:text-left">
             <h2 className="text-2xl font-bold text-white">{student.name}</h2>

@@ -5,6 +5,7 @@ import { Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { DateTimeInput } from "@/components/DateTimeInput";
 
 export type AssignmentDetails = {
   title: string;
@@ -22,7 +23,7 @@ export const EMPTY_ASSIGNMENT_DETAILS: AssignmentDetails = {
   groupId: "",
 };
 
-const inputClass = "bg-[#14151f] border border-white/15 text-white placeholder:text-zinc-500 h-11 rounded-lg focus-visible:ring-orange-500/40";
+const inputClass = "text-white placeholder:text-zinc-500 h-11";
 const labelClass = "text-sm font-semibold text-gray-300";
 
 export function AssignmentDetailsForm({
@@ -61,7 +62,7 @@ export function AssignmentDetailsForm({
           <select
             value={selectedClassroomId}
             disabled
-            className="w-full bg-[#050505]/50 border border-white/5 text-gray-400 h-11 rounded-lg px-3 text-sm cursor-not-allowed"
+            className="w-full text-gray-400 h-11 text-sm cursor-not-allowed border-b transition-colors placeholder:text-zinc-500 rounded-none border-0 border-white/20 bg-transparent px-0 focus:border-orange-500 focus:outline-none focus:ring-0"
           >
             {classrooms.map((c) => (
               <option key={c.id} value={c.id}>
@@ -78,7 +79,7 @@ export function AssignmentDetailsForm({
             value={values.groupId}
             onChange={(e) => onChange({ groupId: e.target.value })}
             disabled={!selectedClassroomId}
-            className="w-full bg-[#14151f] border border-white/15 text-white h-11 rounded-lg px-3 text-sm focus:outline-none focus:ring-1 focus:ring-orange-500/40 disabled:opacity-50"
+            className="w-full text-white h-11 text-sm disabled:opacity-50 border-b transition-colors placeholder:text-zinc-500 rounded-none border-0 border-white/20 bg-transparent px-0 focus:border-orange-500 focus:outline-none focus:ring-0"
           >
             <option value="">Class-wide (all students)</option>
             {groups.map((g) => (
@@ -94,22 +95,20 @@ export function AssignmentDetailsForm({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
         <div className="space-y-2">
           <label className={labelClass}>Unlock Date / Start Date (optional)</label>
-          <Input
-            type="datetime-local"
+          <DateTimeInput
             value={values.startDate}
-            onChange={(e) => onChange({ startDate: e.target.value })}
-            className={cn(inputClass, "[color-scheme:dark]")}
+            onChange={(v) => onChange({ startDate: v })}
+           
           />
           <p className="text-xs text-gray-500">Students can open and work on this assignment starting from this time.</p>
         </div>
 
         <div className="space-y-2">
           <label className={labelClass}>Due Date / Deadline (optional)</label>
-          <Input
-            type="datetime-local"
+          <DateTimeInput
             value={values.dueDate}
-            onChange={(e) => onChange({ dueDate: e.target.value })}
-            className={cn(inputClass, "[color-scheme:dark]")}
+            onChange={(v) => onChange({ dueDate: v })}
+           
           />
           <p className="text-xs text-gray-500">Students must submit before this deadline. No countdown timer required.</p>
         </div>

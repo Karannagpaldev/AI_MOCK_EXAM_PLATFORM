@@ -14,7 +14,7 @@ import { StatTile } from "./workspace";
 const STAGE_STEP: Record<AiGeneratorStage, number> = { config: 2, intent: 3, blueprint: 4, generating: 4 };
 const BOOK_STEP = 1;
 
-const fieldClass = "bg-[#14151f] border border-white/15 text-white placeholder:text-zinc-500 h-9 text-sm rounded-lg";
+const fieldClass = "text-white placeholder:text-zinc-500 h-9 text-sm";
 const primaryButton = "bg-purple-600 hover:bg-purple-700 text-white h-10 px-6 font-bold text-sm rounded-xl shadow-lg shadow-purple-950/40";
 
 const STAGE_LABEL: Record<string, string> = {
@@ -153,11 +153,11 @@ export function SourceFlow({
         </p>
       </div>
       {loadingBooks ? (
-        <div className="flex items-center justify-center gap-2 py-10 text-sm text-gray-400">
+        <div className="flex items-center justify-center gap-2 py-6 sm:py-8 md:py-10 text-sm text-gray-400">
           <Loader2 className="h-4 w-4 animate-spin" /> Loading books...
         </div>
       ) : books.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-white/15 p-10 text-center space-y-2">
+        <div className="rounded-xl border border-dashed border-white/15 p-4 sm:p-6 md:p-10 text-center space-y-2">
           <BookOpen className="h-8 w-8 text-gray-600 mx-auto" />
           <p className="text-sm font-semibold text-gray-300">No books yet</p>
           <p className="text-xs text-gray-500">Upload a textbook PDF with selectable text to get started.</p>
@@ -224,7 +224,7 @@ export function SourceFlow({
         <select
           value={visibility}
           onChange={(e) => setVisibility(e.target.value as BookVisibility)}
-          className="w-full bg-[#14151f] border border-white/15 text-white h-9 rounded-lg px-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-orange-500/50"
+          className="w-full text-white h-9 text-sm rounded-none border-0 border-b border-white/20 bg-transparent px-0 transition-colors placeholder:text-zinc-500 focus:border-orange-500 focus:outline-none focus:ring-0"
         >
           <option value="private">Private, only me</option>
           <option value="organisation">Share with my organisation</option>

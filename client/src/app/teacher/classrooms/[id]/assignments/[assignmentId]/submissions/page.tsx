@@ -89,8 +89,8 @@ export default function AssignmentSubmissionsPage() {
   const statusBadge = (s: SubmissionEntry) => {
     const styles: Record<string, string> = {
       in_progress: "bg-gray-500/10 text-gray-400 border-gray-500/20",
-      submitted: "bg-[#18181b]mber-500/10 text-amber-400 border-amber-500/20",
-      graded: "bg-[#18181b]merald-600/10 text-emerald-400 border-emerald-500/20",
+      submitted: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+      graded: "bg-emerald-600/10 text-emerald-400 border-emerald-500/20",
       evaluating: "bg-orange-500/10 text-orange-400 border-orange-500/30 animate-pulse",
     };
     return (
@@ -126,12 +126,12 @@ export default function AssignmentSubmissionsPage() {
           type="text"
           placeholder="Search students..."
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)} className="bg-[#14151f] border border-white/15 text-white placeholder:text-zinc-400 focus:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0 focus:border-white/30 h-11 rounded-xl text-sm transition-all shadow-inner pl-10"
+          onChange={(e) => setSearchQuery(e.target.value)} className="text-white placeholder:text-zinc-400 h-11 text-sm transition-all pl-10 border-b transition-colors placeholder:text-zinc-500 rounded-none border-0 border-white/20 bg-transparent px-0 focus:border-orange-500 focus:outline-none focus:ring-0"
         />
       </div>
 
       {loading ? (
-        <div className="text-gray-400 text-center py-10">Loading...</div>
+        <div className="text-gray-400 text-center py-6 sm:py-8 md:py-10">Loading...</div>
       ) : submissions.length === 0 ? (
         <Card className="bg-[#0f0f11] border-white/5 py-14 text-center">
           <CardContent className="flex flex-col items-center">

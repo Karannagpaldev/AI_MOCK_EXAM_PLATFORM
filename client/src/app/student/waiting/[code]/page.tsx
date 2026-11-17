@@ -1,252 +1,110 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Clock, Hourglass, CalendarDays, Loader2, ArrowRight, ListChecks, Flag, CheckCircle } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import { verifyJoinCodeService, joinExamService } from "../../student.service";
-import { formatDateTime } from "@/lib/date";
+import { ThemeSwitch } from "@/components/ThemeSwitch";
+
+// Splits the time left into the units shown on the timer. Days only appear when the exam is more than a day away.
+const timeParts = (seconds: number) => {
+  const days = Math.floor(seconds / 86400);
+  const parts = [
+    { value: Math.floor((seconds % 86400) / 3600), unit: "hours" },
+    { value: Math.floor((seconds % 3600) / 60), unit: "minutes" },
+    { value: seconds % 60, unit: "seconds" },
+  ];
+  return days > 0 ? [{ value: days, unit: "days" }, ...parts] : parts;
+};
 
 export default function WaitingRoomPage() {
   const params = useParams();
   const joinCode = params.code as string;
   const router = useRouter();
 
-  const [examData, setExamData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [timeLeft, setTimeLeft] = useState<number | null>(null);
-  const [isJoining, setIsJoining] = useState(false);
-  const [canJoinNow, setCanJoinNow] = useState(false);
+  // When the exam starts, as a timestamp; null while loading.
+  const [startsAt, setStartsAt] = useState<number | null>(null);
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+  const [joinFailed, setJoinFailed] = useState(false);
+  const joiningRef = useRef(false);
+
+  const joinExam = useCallback(async () => {
+    if (joiningRef.current) return;
+    joiningRef.current = true;
+    setJoinFailed(false);
+    try {
+      const res = await joinExamService(joinCode);
+      const submissionId = res.data?.submission?.id || res.submission?.id;
+      router.push(submissionId ? `/student/exams/${submissionId}` : "/student");
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to join exam");
+      joiningRef.current = false;
+      setJoinFailed(true);
+    }
+  }, [joinCode, router]);
 
   useEffect(() => {
     if (!joinCode) return;
-
-    const fetchVerification = async () => {
-      try {
-        const verifyRes = await verifyJoinCodeService(joinCode);
-        const exam = verifyRes.data || verifyRes;
-        
-        setExamData(exam);
-
-        if (!exam.startTime) {
-          // If no start time, they can join immediately
-          setCanJoinNow(true);
-          return;
-        }
-
-        const startMs = new Date(exam.startTime).getTime();
-        const nowMs = new Date().getTime();
-
-        if (nowMs >= startMs) {
-          setCanJoinNow(true);
-        } else {
-          // Calculate seconds remaining
-          setTimeLeft(Math.floor((startMs - nowMs) / 1000));
-        }
-
-      } catch (err: any) {
+    verifyJoinCodeService(joinCode)
+      .then((res) => {
+        const exam = res.data || res;
+        setStartsAt(exam.startTime ? new Date(exam.startTime).getTime() : Date.now());
+      })
+      .catch((err: any) => {
         toast.error(err.response?.data?.message || "Invalid or expired join code");
         router.push("/student");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchVerification();
+      });
   }, [joinCode, router]);
 
-  // The countdown interval is now managed by the CountdownTimer component.
-  const onCountdownReady = () => {
-    setCanJoinNow(true);
-    handleAutoJoin();
-  };
-
-  const handleAutoJoin = async () => {
-    if (isJoining) return;
-    setIsJoining(true);
-    
-    try {
-      const res = await joinExamService(joinCode);
-      toast.success("Exam has started! Good luck.");
-      const submissionId = res.data?.submission?.id || res.submission?.id;
-      if (submissionId) {
-        router.push(`/student/exams/${submissionId}`);
-      } else {
-        router.push("/student");
-      }
-    } catch (err: any) {
-      toast.error(err.response?.data?.message || "Failed to join exam");
-      setIsJoining(false);
-    }
-  };
-
-  const handleManualJoin = () => {
-    handleAutoJoin();
-  };
-
-  const formatTime = (seconds: number) => {
-    const days = Math.floor(seconds / (3600 * 24));
-    const hours = Math.floor((seconds % (3600 * 24)) / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-    
-    if (days > 0) return `${days}d ${hours}h ${minutes}m ${secs}s`;
-    if (hours > 0) return `${hours}h ${minutes}m ${secs}s`;
-    return `${minutes}m ${secs}s`;
-  };
-
-  const CountdownTimer = ({ initialSeconds, onReady }: { initialSeconds: number, onReady: () => void }) => {
-    const [seconds, setSeconds] = useState(initialSeconds);
-
-    useEffect(() => {
-      if (seconds <= 0) {
-        onReady();
-        return;
-      }
-      const timer = setTimeout(() => {
-        setSeconds(seconds - 1);
-      }, 1000);
-      return () => clearTimeout(timer);
-    }, [seconds, onReady]);
-
-    return <>{formatTime(seconds)}</>;
-  };
-
-  if (loading) {
-    return (
-      <div className="flex flex-col h-full items-center justify-center p-10 bg-[#050505]">
-        <Loader2 className="h-8 w-8 text-orange-500 animate-spin mb-4" />
-        <p className="text-gray-400">Verifying Exam Code...</p>
-      </div>
-    );
-  }
-
-  if (!examData) return null;
+  // Counts down against the real start time, so the timer stays right even if the tab was in the background.
+  useEffect(() => {
+    if (startsAt === null) return;
+    const tick = () => {
+      const left = Math.max(0, Math.ceil((startsAt - Date.now()) / 1000));
+      setSecondsLeft(left);
+      if (left === 0) joinExam();
+      return left;
+    };
+    if (tick() === 0) return;
+    const timer = setInterval(() => {
+      if (tick() === 0) clearInterval(timer);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [startsAt, joinExam]);
 
   return (
-    <div className="flex flex-col h-full items-center justify-center p-6 md:p-10 bg-[#050505]">
-      <Card className="w-full max-w-lg bg-[#0f0f11] border-white/5 border-t-4 border-t-blue-500 shadow-2xl relative overflow-hidden">
-        
-        {/* Animated background pulse if waiting */}
-        {!canJoinNow && (
-          <div className="absolute -top-32 -right-32 w-64 h-64 bg-orange-500/10 rounded-full blur-3xl animate-pulse"></div>
-        )}
-
-        <CardHeader className="text-center pb-2 relative z-10">
-          <div className="mx-auto bg-orange-500/10 w-16 h-16 rounded-full flex items-center justify-center mb-4">
-            <Hourglass className={`h-8 w-8 text-orange-400 ${!canJoinNow ? "animate-pulse" : ""}`} />
+    <div className="relative flex w-full flex-1 flex-col items-center justify-center px-4 pb-[10vh] text-center">
+      <ThemeSwitch className="fixed right-3 top-3 z-20" />
+      <button
+        onClick={() => router.push("/student")}
+        className="absolute left-4 top-4 flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-medium text-gray-400 transition-colors hover:bg-white/5 hover:text-white sm:left-6 sm:top-6"
+      >
+        <ArrowLeft className="h-4 w-4" /> Back
+      </button>
+      {secondsLeft === null ? (
+        <Loader2 className="h-6 w-6 animate-spin text-orange-500" />
+      ) : secondsLeft > 0 ? (
+        <>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-500">Starts in</p>
+          <div className="mt-6 flex items-start justify-center gap-5 sm:gap-10">
+            {timeParts(secondsLeft).map((part) => (
+              <div key={part.unit} className="flex flex-col items-center">
+                <span className="text-5xl font-bold tabular-nums text-white sm:text-7xl">{String(part.value).padStart(2, "0")}</span>
+                <span className="mt-2 text-[11px] font-medium uppercase tracking-wider text-gray-500">{part.unit}</span>
+              </div>
+            ))}
           </div>
-          <CardTitle className="text-2xl font-bold text-white tracking-tight">
-            Waiting Room
-          </CardTitle>
-          <CardDescription className="text-gray-400 mt-2 text-base">
-            You are enrolled in <span className="text-orange-300 font-semibold">{examData.title}</span>.
-          </CardDescription>
-        </CardHeader>
-
-        <CardContent className="pt-6 relative z-10 overflow-y-auto max-h-[60vh] custom-scrollbar">
-          {canJoinNow ? (
-            <div className="text-center space-y-6">
-              <div className="bg-[#18181b]merald-500/10 border border-emerald-500/20 rounded-xl p-6 text-emerald-400">
-                <p className="text-lg font-semibold mb-1">The exam is ready!</p>
-                <p className="text-sm text-emerald-400/80">You will be redirected automatically...</p>
-              </div>
-              <Button 
-                onClick={handleManualJoin}
-                disabled={isJoining}
-                className="w-full bg-orange-600 hover:bg-orange-700 text-white font-semibold py-6 text-lg transition-all shadow-lg shadow-blue-900/20 hover:shadow-blue-900/40"
-              >
-                {isJoining ? (
-                  <>
-                    <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Preparing Exam...
-                  </>
-                ) : (
-                  <>
-                    Enter Exam Now <ArrowRight className="ml-2 h-5 w-5" />
-                  </>
-                )}
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-8">
-              {/* Countdown Display */}
-              <div className="text-center space-y-3">
-                <p className="text-sm text-gray-500 font-medium uppercase tracking-wider">Starts In</p>
-                <div className="font-mono text-4xl md:text-5xl font-bold text-white tracking-tight drop-shadow-md">
-                  {timeLeft !== null ? <CountdownTimer initialSeconds={timeLeft} onReady={onCountdownReady} /> : "--"}
-                </div>
-              </div>
-
-              {/* Exam Metadata */}
-              <div className="bg-[#14151f] border-white/15 text-white placeholder:text-zinc-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/30/20 border border-white/5 rounded-xl p-5 space-y-4">
-                <div className="flex items-center gap-3 text-gray-300">
-                  <CalendarDays className="h-5 w-5 text-orange-400/70" />
-                  <div>
-                    <p className="text-xs text-gray-500">Scheduled Start</p>
-                    <p className="font-medium">{formatDateTime(examData.startTime)}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 text-gray-300">
-                  <Clock className="h-5 w-5 text-orange-400/70" />
-                  <div>
-                    <p className="text-xs text-gray-500">Duration</p>
-                    <p className="font-medium">{examData.duration} Minutes</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Instructions */}
-              {examData.instructions && examData.instructions.length > 0 && (
-                <div className="bg-[#18181b] border border-white/5 rounded-xl p-5 space-y-3">
-                  <div className="flex items-center gap-2 text-white font-bold">
-                    <ListChecks className="h-5 w-5 text-orange-400" />
-                    Instructions
-                  </div>
-                  <ul className="space-y-2">
-                    {examData.instructions.map((inst: string, idx: number) => (
-                      <li key={idx} className="text-sm text-gray-300 flex items-start gap-2">
-                        <span className="text-orange-400 mt-0.5">•</span>
-                        <span>{inst}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {/* Color Scheme Legend */}
-              <div className="bg-[#18181b] border border-white/5 rounded-xl p-5 space-y-3">
-                <div className="text-white font-bold text-sm mb-2">Exam Legend</div>
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-4 h-4 rounded bg-[#18181b]merald-600 flex items-center justify-center shrink-0">
-                      <CheckCircle className="h-3 w-3 text-white" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-emerald-400">Answered</p>
-                      <p className="text-[11px] text-gray-400 leading-snug">Indicates you have selected an answer.</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="w-4 h-4 rounded bg-orange-500/20 border border-orange-500/50 flex items-center justify-center shrink-0">
-                      <Flag className="h-3 w-3 text-orange-400" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-orange-400">Flagged</p>
-                      <p className="text-[11px] text-gray-400 leading-snug">Flag questions to review them later. They will be submitted with your other answers.</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="text-center text-sm text-gray-500">
-                Please wait on this page. You will be automatically redirected to the exam when the timer reaches zero.
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        </>
+      ) : joinFailed ? (
+        <button onClick={joinExam} className="rounded-xl bg-orange-600 px-6 py-3 text-sm font-bold text-white transition-colors hover:bg-orange-700">
+          Enter exam
+        </button>
+      ) : (
+        <div className="flex items-center gap-2 text-sm text-gray-400">
+          <Loader2 className="h-4 w-4 animate-spin text-orange-500" /> Starting your exam…
+        </div>
+      )}
     </div>
   );
 }

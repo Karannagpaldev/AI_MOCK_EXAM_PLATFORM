@@ -137,7 +137,7 @@ export default function ExamsPage() {
             placeholder="Search exams by title..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="bg-[#14151f] border border-white/15 text-white placeholder:text-zinc-400 focus:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0 focus:border-white/30 h-11 rounded-xl text-sm transition-all shadow-inner pl-10"
+            className="text-white placeholder:text-zinc-400 h-11 text-sm transition-all pl-10"
           />
         </div>
 
@@ -199,7 +199,7 @@ export default function ExamsPage() {
                 {/* Top Badges: Status & Max Marks */}
                 <div className="flex items-center justify-between gap-2 mb-3">
                   <span className="text-xs font-semibold text-zinc-400">
-                    {e.type === "SCHEDULED" ? "Scheduled (Fixed Time)" : "On-Demand (Flexible)"}
+                    {e.type === "SCHEDULED" ? "Fixed Time" : "Flexible"}
                   </span>
 
                   <div className="flex items-center gap-2 shrink-0">

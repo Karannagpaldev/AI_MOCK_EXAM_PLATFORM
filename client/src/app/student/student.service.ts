@@ -25,6 +25,12 @@ export const verifyJoinCodeService = async (joinCode: string) => {
   return res.data;
 };
 
+// Exams the student has entered the join code for but not started yet.
+export const getUpcomingExamsService = async () => {
+  const res = await api.get("/submissions/upcoming");
+  return res.data;
+};
+
 export const getMySubmissionsService = async (params?: { page?: number, limit?: number, search?: string, days?: string }) => {
   const res = await api.get("/submissions/me", { params });
   return res.data;

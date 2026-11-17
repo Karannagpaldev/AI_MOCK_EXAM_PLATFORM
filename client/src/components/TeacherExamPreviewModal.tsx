@@ -8,7 +8,7 @@ import { getExamByIdService, getSectionsWithDetailsService } from "@/app/teacher
 import ReactMarkdown from "react-markdown";
 import { normalizeCodeBlocks } from "@/lib/markdown";
 import { MATH_REMARK_PLUGINS, MATH_REHYPE_PLUGINS } from "@/lib/markdownMath";
-import { ContentBlocksView, OptionValue, type ContentBlock } from "@/components/QuestionContentBlocks";
+import { ContentBlocksView, OptionValue, type ContentBlock, MarkdownCode } from "@/components/QuestionContentBlocks";
 
 type FlattenedQuestion = {
   id: string;
@@ -113,7 +113,7 @@ export function TeacherExamPreviewModal({
   if (flattenedQuestions.length === 0) {
     return (
       <div className="fixed inset-0 z-50 bg-[#14151f] border-white/15 text-white placeholder:text-zinc-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/30/80 backdrop-blur-md flex items-center justify-center p-4">
-        <Card className="bg-[#0f0f11] border-white/10 p-8 max-w-md w-full text-center space-y-4 text-white">
+        <Card className="bg-[#0f0f11] border-white/10 p-5 sm:p-8 max-w-md w-full text-center space-y-4 text-white">
           <AlertCircle className="h-10 w-10 text-yellow-500 mx-auto" />
           <h3 className="text-xl font-bold">No Questions Found</h3>
           <p className="text-sm text-gray-400">
@@ -133,12 +133,12 @@ export function TeacherExamPreviewModal({
   return (
     <div className="fixed inset-0 z-50 bg-[#050505] text-white flex flex-col overflow-hidden animate-in fade-in duration-200">
       {/* Top Banner */}
-      <div className="bg-[#18181b]mber-500/10 border-b border-amber-500/20 px-6 py-2 flex items-center justify-between text-xs text-amber-300">
+      <div className="bg-amber-500/10 border-b border-amber-500/20 px-6 py-2 flex items-center justify-between text-xs text-amber-300">
         <div className="flex items-center gap-2 font-semibold">
           <Eye className="h-4 w-4 text-amber-400" />
           <span>STUDENT VIEW PREVIEW — Interactive preview mode for teachers. No submissions will be saved.</span>
         </div>
-        <button onClick={onClose} className="hover:text-white font-bold uppercase tracking-wider text-[11px] bg-[#18181b]mber-500/20 hover:bg-[#18181b]mber-500/30 px-3 py-1 rounded border border-amber-500/30 transition-colors">
+        <button onClick={onClose} className="hover:text-white font-bold uppercase tracking-wider text-[11px] bg-amber-500/20 hover:bg-amber-500/30 px-3 py-1 rounded border border-amber-500/30 transition-colors">
           EXIT PREVIEW ✕
         </button>
       </div>
@@ -171,7 +171,7 @@ export function TeacherExamPreviewModal({
         {/* Left Pane: Question Content */}
         <div className="flex-1 flex flex-col overflow-y-auto custom-scrollbar">
           {/* Question Section Title & Header */}
-          <div className="px-8 py-6 pb-2 border-b border-white/5">
+          <div className="px-4 sm:px-6 md:px-8 py-6 pb-2 border-b border-white/5">
             <p className="text-orange-400 font-bold text-xs uppercase tracking-widest mb-1">
               {currentQuestion.sectionTitle}
             </p>
@@ -186,7 +186,7 @@ export function TeacherExamPreviewModal({
           </div>
 
           {/* Question Description & Inputs */}
-          <div className="flex-1 px-8 py-8 space-y-8 max-w-4xl">
+          <div className="flex-1 px-4 sm:px-6 md:px-8 py-8 space-y-8 max-w-4xl">
             <div>
               <div className="text-xl md:text-2xl font-bold text-white leading-snug whitespace-pre-wrap prose prose-invert max-w-none">
                 <ReactMarkdown
@@ -194,27 +194,15 @@ export function TeacherExamPreviewModal({
                   rehypePlugins={MATH_REHYPE_PLUGINS}
                   components={{
                     pre: ({ children }) => {
-                      const lang = String(((children as any)?.props?.className) || "").replace("language-", "") || "code";
                       return (
-                        <div className="my-6 rounded-2xl overflow-hidden border border-white/10 bg-[#09090b] shadow-2xl font-normal">
-                          <div className="bg-white/5 px-4 py-3 border-b border-white/5 flex items-center gap-2">
-                            <div className="w-3.5 h-3.5 rounded-full bg-[#ff5f56]" />
-                            <div className="w-3.5 h-3.5 rounded-full bg-[#ffbd2e]" />
-                            <div className="w-3.5 h-3.5 rounded-full bg-[#27c93f]" />
-                            <span className="ml-3 text-sm font-mono text-gray-500 tracking-wider uppercase">{lang}</span>
-                          </div>
+                        <div className="my-6 rounded-2xl overflow-hidden border border-white/10 bg-[#09090b] keep-dark shadow-2xl font-normal">
                           <div className="p-6 overflow-x-auto custom-scrollbar">
                             {children}
                           </div>
                         </div>
                       );
                     },
-                    code: ({ className, children, ...props }) => {
-                      const isInline = !(className?.includes("language-") || String(children ?? "").includes("\n"));
-                      return isInline
-                        ? <code className="bg-orange-500/10 px-2 py-1 rounded text-lg text-orange-300 font-mono border border-orange-500/30 font-normal" {...props}>{children}</code>
-                        : <code className={"block font-mono text-[16px] md:text-lg leading-relaxed text-gray-300 whitespace-pre-wrap" + (className ? " " + className : "")} {...props}>{children}</code>;
-                    },
+                    code: ({ className, children }) => <MarkdownCode className={className} size="large">{children}</MarkdownCode>,
                     p: ({ ...props }) => <p className="mb-4 last:mb-0" {...props} />,
                   }}
                 >
@@ -253,7 +241,7 @@ export function TeacherExamPreviewModal({
                         relative flex items-center p-4 cursor-pointer rounded-xl border-2 transition-all duration-200 group
                         ${
                           isSelected
-                            ? "bg-[#18181b]mber-500/10 border-amber-500/50 text-white"
+                            ? "bg-amber-500/10 border-amber-500/50 text-white"
                             : "bg-transparent border-white/10 text-gray-300 hover:border-white/30 hover:bg-white/5"
                         }
                       `}
@@ -269,7 +257,7 @@ export function TeacherExamPreviewModal({
                       <div
                         className={`
                           flex items-center justify-center w-8 h-8 rounded-md border mr-4 shrink-0 transition-colors font-bold text-sm
-                          ${isSelected ? "border-amber-500 bg-[#18181b]mber-600 text-white" : "border-zinc-700 text-white/80 group-hover:border-white/40"}
+                          ${isSelected ? "border-amber-500 bg-amber-600 text-white" : "border-zinc-700 text-white/80 group-hover:border-white/40"}
                         `}
                       >
                         {letter}
@@ -284,7 +272,7 @@ export function TeacherExamPreviewModal({
           </div>
 
           {/* Question Footer Actions */}
-          <div className="shrink-0 p-6 px-8 border-t border-white/5 bg-[#0f0f11]/50 flex items-center justify-end">
+          <div className="shrink-0 p-6 px-4 sm:px-6 md:px-8 border-t border-white/5 bg-[#0f0f11]/50 flex items-center justify-end">
             <div className="flex gap-4">
               <Button
                 variant="outline"
@@ -335,7 +323,7 @@ export function TeacherExamPreviewModal({
                 }
 
                 if (isAnswered) {
-                  bgColor = "bg-[#18181b]merald-600";
+                  bgColor = "bg-emerald-600";
                   borderColor = isCurrent ? "border-emerald-400 ring-2 ring-emerald-500 ring-offset-2 ring-offset-[#0f0f11]" : "border-emerald-500";
                   textColor = "text-white";
                 }

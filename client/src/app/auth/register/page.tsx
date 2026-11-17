@@ -11,6 +11,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Eye, EyeOff } from 'lucide-react';
 
 import { registerService, verifyOtpService, resendOtpService, loginService } from '../auth.service';
+import { readRedirect, withRedirect } from '@/lib/redirect';
 import { useAuthStore } from '@/store/authStore';
 
 const registerSchema = z.object({
@@ -36,6 +37,9 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isResending, setIsResending] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
+  // Set when someone was sent here from another page (the invitation page), so they can be sent back after registering.
+  const [redirect, setRedirect] = useState<string | null>(null);
+  useEffect(() => setRedirect(readRedirect()), []);
 
   useEffect(() => {
     if (resendCooldown <= 0) return;
@@ -102,7 +106,7 @@ export default function RegisterPage() {
       setUser(userData, token);
 
       toast.success("Email verified — you're all set!");
-      router.push('/student');
+      router.push(readRedirect() ?? '/student');
     } catch (error: any) {
       toast.error(error.message || "Verification failed. Please check your code.");
     } finally {
@@ -132,7 +136,7 @@ export default function RegisterPage() {
                 id="name" 
                 type="text" 
                 placeholder="John Doe" 
-                className="w-full bg-[#14151f] border border-white/15 rounded-xl px-4 py-3 text-white placeholder:text-zinc-400 focus:outline-none focus:ring-1 focus:ring-orange-500/40 transition-all"
+                className="w-full py-3 text-white placeholder:text-zinc-400 transition-colors border-b placeholder:text-zinc-500 rounded-none border-0 border-b border-white/20 bg-transparent px-0 focus:border-orange-500 focus:border-b-2 focus:outline-none focus:ring-0"
                 {...register('name')}
               />
               {errors.name && (
@@ -146,7 +150,7 @@ export default function RegisterPage() {
                 id="email" 
                 type="email" 
                 placeholder="name@university.edu" 
-                className="w-full bg-[#14151f] border border-white/15 rounded-xl px-4 py-3 text-white placeholder:text-zinc-400 focus:outline-none focus:ring-1 focus:ring-orange-500/40 transition-all"
+                className="w-full py-3 text-white placeholder:text-zinc-400 transition-colors border-b placeholder:text-zinc-500 rounded-none border-0 border-b border-white/20 bg-transparent px-0 focus:border-orange-500 focus:border-b-2 focus:outline-none focus:ring-0"
                 {...register('email')}
               />
               {errors.email && (
@@ -161,7 +165,7 @@ export default function RegisterPage() {
                   id="password" 
                   type={showPassword ? "text" : "password"} 
                   placeholder="••••••••" 
-                  className="w-full bg-[#14151f] border border-white/15 rounded-xl px-4 py-3 text-white placeholder:text-zinc-400 focus:outline-none focus:ring-1 focus:ring-orange-500/40 transition-all pr-12"
+                  className="w-full py-3 text-white placeholder:text-zinc-400 transition-colors pr-12 border-b placeholder:text-zinc-500 rounded-none border-0 border-b border-white/20 bg-transparent px-0 focus:border-orange-500 focus:border-b-2 focus:outline-none focus:ring-0"
                   {...register('password')}
                 />
                 <button
@@ -196,7 +200,7 @@ export default function RegisterPage() {
 
           <div className="text-center text-sm text-gray-400">
             Already have an account?{' '}
-            <Link href="/auth/login" className="text-orange-400 font-semibold hover:text-orange-300 hover:underline transition-colors">
+            <Link href={withRedirect("/auth/login", redirect)} className="text-orange-400 font-semibold hover:text-orange-300 hover:underline transition-colors">
               Sign In
             </Link>
           </div>
@@ -222,7 +226,7 @@ export default function RegisterPage() {
                 type="text" 
                 maxLength={6}
                 placeholder="123456" 
-                className="w-full bg-[#14151f] border border-white/15 rounded-xl px-4 py-3 text-white placeholder:text-zinc-400 focus:outline-none focus:ring-1 focus:ring-orange-500/40 transition-all text-center text-2xl tracking-widest font-semibold"
+                className="w-full py-3 text-white placeholder:text-zinc-400 transition-all text-center text-2xl tracking-widest font-semibold border-b transition-colors placeholder:text-zinc-500 rounded-none border-0 border-b border-white/20 bg-transparent px-0 focus:border-orange-500 focus:border-b-2 focus:outline-none focus:ring-0"
                 {...registerVerify('otp')}
               />
               {verifyErrors.otp && (

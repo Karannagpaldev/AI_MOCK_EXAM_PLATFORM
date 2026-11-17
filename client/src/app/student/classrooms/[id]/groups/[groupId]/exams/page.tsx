@@ -74,7 +74,7 @@ export default function StudentGroupExamsPage() {
     }
   };
 
-  if (loading) return <div className="text-gray-400 text-center py-10">Loading...</div>;
+  if (loading) return <div className="text-gray-400 text-center py-6 sm:py-8 md:py-10">Loading...</div>;
 
   return (
     <div>
@@ -96,13 +96,13 @@ export default function StudentGroupExamsPage() {
             placeholder="Search exams..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-[#14151f] border border-white/15 text-white placeholder:text-zinc-400 focus:outline-none focus:ring-0 focus:border-orange-500/50 h-11 rounded-xl text-sm pl-10"
+            className="w-full text-white placeholder:text-zinc-400 h-11 text-sm pl-10 border-b transition-colors placeholder:text-zinc-500 rounded-none border-0 border-white/20 bg-transparent px-0 focus:border-orange-500 focus:outline-none focus:ring-0"
           />
         </div>
       </div>
 
       {exams.length === 0 ? (
-        <Card className="bg-[#0f0f11] border-white/5 py-10 text-center">
+        <Card className="bg-[#0f0f11] border-white/5 py-6 sm:py-8 md:py-10 text-center">
           <CardContent>
             <FileText className="h-8 w-8 text-gray-500 mx-auto mb-3" />
             <p className="text-gray-400">No exams for this group yet.</p>

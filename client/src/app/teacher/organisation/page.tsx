@@ -36,11 +36,11 @@ export default function TeacherOrganisationPage() {
     })();
   }, []);
 
-  if (loading) return <div className="p-10 text-white text-center">Loading organisation details...</div>;
+  if (loading) return <div className="p-4 sm:p-6 md:p-10 text-white text-center">Loading organisation details...</div>;
 
   if (!org) {
     return (
-      <div className="p-10 h-full flex items-center justify-center">
+      <div className="p-4 sm:p-6 md:p-10 h-full flex items-center justify-center">
         <Card className="bg-[#0f0f11] border-white/5 max-w-md w-full">
           <CardContent className="pt-6 flex flex-col items-center text-center space-y-4">
             <div className="bg-orange-600/20 border border-orange-500/30 rounded-2xl p-3">
@@ -62,9 +62,9 @@ export default function TeacherOrganisationPage() {
   }
 
   return (
-    <div className="p-10 h-full overflow-y-auto custom-scrollbar">
+    <div className="p-4 sm:p-6 md:p-10 h-full overflow-y-auto custom-scrollbar">
       <div className="mb-8">
-        <h2 className="text-3xl font-bold text-white tracking-tight">Organisation</h2>
+        <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Organisation</h2>
         <p className="text-gray-400 mt-1">Your organisation public details.</p>
       </div>
 
@@ -85,7 +85,7 @@ export default function TeacherOrganisationPage() {
 
           <CardContent className="pt-6 flex flex-col items-center text-center space-y-6">
             <div>
-              <h3 className="text-3xl font-bold text-white">{org.name}</h3>
+              <h3 className="text-2xl sm:text-3xl font-bold text-white">{org.name}</h3>
             </div>
 
             <div className="w-full space-y-4">

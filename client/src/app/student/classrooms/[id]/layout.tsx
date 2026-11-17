@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
+import { ThemeSwitch } from "@/components/ThemeSwitch";
 import { ArrowLeft, ClipboardList, FileText, Users, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { getMyClassroomsService } from "../classroom.service";
@@ -45,14 +46,47 @@ export default function StudentClassroomLayout({ children }: { children: React.R
     })();
   }, [classroomId]);
 
-  if (loading) return <div className="p-10 text-white text-center">Loading classroom...</div>;
-  if (!classroom) return <div className="p-10 text-white text-center">Classroom not found</div>;
+  if (loading) return <div className="p-4 sm:p-6 md:p-10 text-white text-center">Loading classroom...</div>;
+  if (!classroom) return <div className="p-4 sm:p-6 md:p-10 text-white text-center">Classroom not found</div>;
 
   return (
     <ClassroomContext.Provider value={{ classroom, reloadClassroom }}>
-      <div className="flex h-full overflow-hidden">
+      <div className="flex flex-col md:flex-row h-full overflow-hidden">
+        {/* ── On phones the sidebar becomes a bar at the top: back link, classroom name, and the sections as a row you can scroll. ── */}
+        <div className="md:hidden shrink-0 border-b border-white/10 bg-black">
+          <div className="flex items-center justify-between gap-3 px-4 pt-3">
+            <button
+              onClick={() => router.push("/student/classrooms")}
+              className="flex items-center gap-1.5 text-gray-400 hover:text-white text-sm transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4 shrink-0" /> <span>All Classrooms</span>
+            </button>
+            <ThemeSwitch />
+          </div>
+          <h2 className="px-4 pt-2 text-lg font-bold text-white tracking-tight truncate" title={classroom.name}>{classroom.name}</h2>
+          <nav className="flex gap-2 overflow-x-auto custom-scrollbar px-4 py-3">
+            {navItems.map((item) => {
+              const href = `/student/classrooms/${classroomId}/${item.href}`;
+              const isActive = pathname === href || pathname.startsWith(href + "/");
+              const Icon = item.icon;
+              return (
+                <Link
+                  key={item.href}
+                  href={href}
+                  className={`shrink-0 whitespace-nowrap flex items-center gap-2 px-3.5 py-2 rounded-full text-sm font-medium transition-colors ${
+                    isActive ? "bg-orange-600 text-white font-semibold" : "bg-zinc-900 text-white/70 hover:text-white"
+                  }`}
+                >
+                  <Icon className="h-4 w-4 shrink-0" />
+                  <span>{item.label}</span>
+                </Link>
+              );
+            })}
+          </nav>
+        </div>
+
         {/* ── Secondary Sidebar ─────────────────────────────────────── */}
-        <aside className={`shrink-0 border-r border-white/10 bg-black flex flex-col transition-all duration-300 ${
+        <aside className={`shrink-0 border-r border-white/10 bg-black hidden md:flex flex-col transition-all duration-300 ${
           isCollapsed ? "w-16" : "w-64"
         }`}>
           <div className="p-4 border-b border-white/10">
@@ -124,10 +158,13 @@ export default function StudentClassroomLayout({ children }: { children: React.R
               )}
             </div>
           </div>
+          <div className="p-3 border-t border-white/10">
+            <ThemeSwitch label={!isCollapsed} className={`w-full ${isCollapsed ? "justify-center" : "justify-start px-3"}`} />
+          </div>
         </aside>
 
         {/* ── Section Content ───────────────────────────────────────── */}
-        <main className="flex-1 overflow-y-auto custom-scrollbar p-10">
+        <main className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-4 sm:p-6 md:p-10">
           {children}
         </main>
       </div>

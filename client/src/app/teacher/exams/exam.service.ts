@@ -68,6 +68,28 @@ export const saveGeneratedExamService = async (data: any) => {
   return res.data;
 };
 
+// Adds one topic to a draft exam: the AI plans its subtopics and writes the questions (can take up to a minute).
+export const addTopicService = async (examId: string, data: { sectionId: string; blockId: string; topic: string; description?: string; count: number; difficulty?: string }) => {
+  const res = await api.post(`/exams/${examId}/topics`, data);
+  return res.data;
+};
+
+/** Adds real questions from the past papers the exam was made from: subtopics (keys from the topic picker) and how many of each. No AI. */
+export const addPaperTopicsService = async (
+  examId: string,
+  // questionType is only needed when the section has both MCQ and written groups.
+  data: { sectionId: string; questionType?: "mcq" | "descriptive"; picks: { documentId: string; subtopic: string; count: number }[] }
+) => {
+  const res = await api.post(`/exams/${examId}/topics/from-papers`, data);
+  return res.data;
+};
+
+// Removes a topic from a draft exam by deleting the questions tagged with it.
+export const removeTopicService = async (examId: string, data: { sectionId: string; topic: string }) => {
+  const res = await api.post(`/exams/${examId}/topics/remove`, data);
+  return res.data;
+};
+
 export const updateQuestionService = async (id: string, data: any) => {
   const res = await api.patch(`/questions/${id}`, data);
   return res.data;

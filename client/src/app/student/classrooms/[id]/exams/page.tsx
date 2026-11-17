@@ -150,7 +150,7 @@ export default function StudentClassroomExamsPage() {
     { key: "closed", label: "Past / Closed", count: counts.closed },
   ];
 
-  if (loading) return <div className="text-gray-400 text-center py-10">Loading...</div>;
+  if (loading) return <div className="text-gray-400 text-center py-6 sm:py-8 md:py-10">Loading...</div>;
 
   return (
     <div>
@@ -166,7 +166,7 @@ export default function StudentClassroomExamsPage() {
             placeholder="Search exams..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-[#14151f] border border-white/15 text-white placeholder:text-zinc-400 focus:outline-none focus:ring-0 focus:border-orange-500/50 h-11 rounded-xl text-sm pl-10"
+            className="w-full text-white placeholder:text-zinc-400 h-11 text-sm pl-10 border-b transition-colors placeholder:text-zinc-500 rounded-none border-0 border-white/20 bg-transparent px-0 focus:border-orange-500 focus:outline-none focus:ring-0"
           />
         </div>
       </div>
@@ -189,7 +189,7 @@ export default function StudentClassroomExamsPage() {
       </div>
 
       {exams.length === 0 ? (
-        <Card className="bg-[#0f0f11] border-white/5 py-10 text-center">
+        <Card className="bg-[#0f0f11] border-white/5 py-6 sm:py-8 md:py-10 text-center">
           <CardContent>
             <FileText className="h-8 w-8 text-gray-500 mx-auto mb-3" />
             <p className="text-gray-400">
@@ -204,7 +204,7 @@ export default function StudentClassroomExamsPage() {
             return (
               <div
                 key={exam.id}
-                className="flex items-center justify-between gap-4 p-4 bg-[#0f0f11] border border-white/5 rounded-xl"
+                className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 p-4 bg-[#0f0f11] border border-white/5 rounded-xl"
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="h-9 w-9 bg-orange-600/20 text-orange-400 rounded-lg flex items-center justify-center border border-orange-500/30 shrink-0">
@@ -221,7 +221,7 @@ export default function StudentClassroomExamsPage() {
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 shrink-0">
+                <div className="flex flex-wrap items-center gap-3 sm:shrink-0">
                   <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold border ${st.cls}`}>{st.label}</span>
                   {renderAction(exam)}
                 </div>

@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { listGroupsService } from "../../../../group.service";
 import { createAssignmentService, listAssignmentsForClassroomService } from "../../../../../assignments/assignment.service";
 import { formatDateTime } from "@/lib/date";
+import { DateTimeInput } from "@/components/DateTimeInput";
 
 interface GroupEntry {
   id: string;
@@ -94,7 +95,7 @@ export default function GroupAssignmentsPage() {
     }
   };
 
-  if (loading) return <div className="text-gray-400 text-center py-10">Loading...</div>;
+  if (loading) return <div className="text-gray-400 text-center py-6 sm:py-8 md:py-10">Loading...</div>;
 
   return (
     <div>
@@ -105,9 +106,9 @@ export default function GroupAssignmentsPage() {
         <ArrowLeft className="h-3.5 w-3.5" /> Back to Group
       </button>
 
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h3 className="text-2xl font-bold text-white">Group Assignments</h3>
+          <h3 className="text-xl sm:text-2xl font-bold text-white">Group Assignments</h3>
           <p className="text-gray-400 text-base mt-1">Assignments for {group?.name || "this group"}.</p>
         </div>
         <Button className="bg-orange-600 hover:bg-orange-700 text-white shrink-0" onClick={() => setDialogOpen(true)}>
@@ -116,7 +117,7 @@ export default function GroupAssignmentsPage() {
       </div>
 
       {assignments.length === 0 ? (
-        <Card className="bg-[#0f0f11] border-white/5 py-10 text-center">
+        <Card className="bg-[#0f0f11] border-white/5 py-6 sm:py-8 md:py-10 text-center">
           <CardContent>
             <ClipboardList className="h-8 w-8 text-gray-500 mx-auto mb-3" />
             <p className="text-gray-400">No assignments for this group yet.</p>
@@ -135,7 +136,7 @@ export default function GroupAssignmentsPage() {
                   <div className="h-9 w-9 bg-orange-600/20 text-orange-400 rounded-lg flex items-center justify-center border border-orange-500/30 shrink-0">
                     <ClipboardList className="h-4 w-4" />
                   </div>
-                  <span className="text-[10px] font-bold uppercase px-2 py-1 rounded bg-[#18181b]mber-500/10 text-amber-400 border border-amber-500/20 shrink-0">
+                  <span className="text-[10px] font-bold uppercase px-2 py-1 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 shrink-0">
                     {a.totalMarks} marks
                   </span>
                 </div>
@@ -169,7 +170,7 @@ export default function GroupAssignmentsPage() {
                 placeholder="e.g. Chapter 3 Homework"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                className="w-full bg-[#18181b] border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-white/30 transition-all text-sm"
+                className="w-full py-3 text-white placeholder:text-gray-500 transition-all text-sm rounded-none border-0 border-b border-white/20 bg-transparent px-0 transition-colors placeholder:text-zinc-500 focus:border-orange-500 focus:outline-none focus:ring-0"
               />
             </div>
             <div className="space-y-1.5">
@@ -183,23 +184,21 @@ export default function GroupAssignmentsPage() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-gray-300">Start Date (optional)</label>
-                <input
-                  type="datetime-local"
+                <DateTimeInput
                   value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full bg-[#18181b] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-1 focus:ring-white/30 transition-all text-sm [color-scheme:dark]"
+                  onChange={(v) => setStartDate(v)}
+                 
                 />
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-gray-300">Due Date (optional)</label>
-                <input
-                  type="datetime-local"
+                <DateTimeInput
                   value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                  className="w-full bg-[#18181b] border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-1 focus:ring-white/30 transition-all text-sm [color-scheme:dark]"
+                  onChange={(v) => setDueDate(v)}
+                 
                 />
               </div>
             </div>

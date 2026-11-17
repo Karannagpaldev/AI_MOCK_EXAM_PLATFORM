@@ -88,7 +88,7 @@ export default function ProfileView() {
     superadmin: 'bg-red-500/10 text-red-500 border-red-500/20',
     admin: 'bg-purple-500/10 text-purple-500 border-purple-500/20',
     teacher: 'bg-orange-500/10 text-orange-500 border-orange-500/30',
-    student: 'bg-[#18181b]merald-500/10 text-emerald-500 border-emerald-500/20',
+    student: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20',
   };
 
   return (
@@ -104,7 +104,7 @@ export default function ProfileView() {
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Account Settings</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Account Settings</h1>
             <p className="text-gray-400 text-sm mt-1">Manage your profile, preferences, and security.</p>
           </div>
         </div>
@@ -167,7 +167,7 @@ export default function ProfileView() {
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         disabled={isUpdating}
-                        className="w-full bg-[#050505] border border-white/5 rounded-xl pl-10 pr-4 py-2.5 text-white focus:ring-2 focus:ring-blue-500 focus:border-orange-500 focus:outline-none transition-all disabled:opacity-50"
+                        className="w-full pl-10 pr-4 py-2.5 text-white transition-all disabled:opacity-50 rounded-none border-0 border-b border-white/20 bg-transparent px-0 transition-colors placeholder:text-zinc-500 focus:border-orange-500 focus:outline-none focus:ring-0"
                       />
                     </div>
                   </div>
@@ -180,7 +180,7 @@ export default function ProfileView() {
                         type="email" 
                         value={user.email}
                         disabled
-                        className="w-full bg-[#050505] border border-white/5 rounded-xl pl-10 pr-4 py-2.5 text-gray-400 cursor-not-allowed focus:outline-none"
+                        className="w-full pl-10 pr-4 py-2.5 text-gray-400 cursor-not-allowed rounded-none border-0 border-b border-white/20 bg-transparent px-0 transition-colors placeholder:text-zinc-500 focus:border-orange-500 focus:outline-none focus:ring-0"
                       />
                     </div>
                   </div>

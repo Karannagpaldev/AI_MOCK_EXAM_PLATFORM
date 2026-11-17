@@ -36,12 +36,12 @@ export default function AdminPlansPage() {
     })();
   }, []);
 
-  if (loading) return <div className="p-10 text-white text-center">Loading plans...</div>;
+  if (loading) return <div className="p-4 sm:p-6 md:p-10 text-white text-center">Loading plans...</div>;
 
   return (
-    <div className="p-10 h-full overflow-y-auto custom-scrollbar">
+    <div className="p-4 sm:p-6 md:p-10 h-full overflow-y-auto custom-scrollbar">
       <div className="mb-8">
-        <h2 className="text-3xl font-bold text-white tracking-tight">Subscription Plans</h2>
+        <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Subscription Plans</h2>
         <p className="text-gray-400 mt-1">The available plans. Assign plans to organisations from the organisation detail page.</p>
       </div>
 

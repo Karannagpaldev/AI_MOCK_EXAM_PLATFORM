@@ -37,7 +37,7 @@ export default function ExamResultsPage() {
   }, [examId]);
 
   if (loading) {
-    return <div className="p-10 text-white text-center">Loading results...</div>;
+    return <div className="p-4 sm:p-6 md:p-10 text-white text-center">Loading results...</div>;
   }
 
   const totalSubmissions = submissions.length;
@@ -53,7 +53,7 @@ export default function ExamResultsPage() {
     : 0;
 
   return (
-    <div className="flex-1 overflow-y-auto custom-scrollbar p-10">
+    <div className="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-6 md:p-10">
       <header className="flex items-center justify-between mb-8">
         <div>
           <div className="flex items-center gap-3 mb-2">
@@ -73,7 +73,7 @@ export default function ExamResultsPage() {
               <Trophy className="mr-2 h-4 w-4" /> View Leaderboard
             </Button>
           </div>
-          <h2 className="text-3xl font-bold text-white tracking-tight">{exam?.title || "Exam"} Results</h2>
+          <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">{exam?.title || "Exam"} Results</h2>
           <p className="text-gray-400 mt-1">View all student submissions and scores.</p>
         </div>
       </header>
@@ -120,7 +120,7 @@ export default function ExamResultsPage() {
         </CardHeader>
         <CardContent className="p-0">
           {submissions.length === 0 ? (
-            <div className="p-10 text-center text-gray-500">
+            <div className="p-4 sm:p-6 md:p-10 text-center text-gray-500">
               No students have joined or submitted this exam yet.
             </div>
           ) : (

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { LayoutDashboard, LogOut, ChevronsLeft, ChevronsRight, Menu, X, BookOpen, User, School, Building2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ThemeSwitch } from "@/components/ThemeSwitch";
 import { useAuthStore } from "@/store/authStore";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
@@ -39,7 +40,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
 
   return (
     <TooltipProvider>
-      <div className="flex flex-col md:flex-row h-screen w-full bg-[#050505] text-gray-100 font-sans overflow-hidden">
+      <div className="flex flex-col md:flex-row h-dvh w-full bg-[#050505] text-gray-100 font-sans overflow-hidden">
         
         {/* Mobile Header */}
         {!isInsideClassroomDetail && (
@@ -50,9 +51,12 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
               </div>
               <span className="font-bold text-lg text-white tracking-tight">Abhyas</span>
             </div>
-            <button onClick={() => setIsMobileOpen(true)} className="p-2 -mr-2 text-gray-400 hover:text-white">
-              <Menu className="h-6 w-6" />
-            </button>
+            <div className="flex items-center gap-1">
+              <ThemeSwitch />
+              <button onClick={() => setIsMobileOpen(true)} className="p-2 -mr-2 text-gray-400 hover:text-white">
+                <Menu className="h-6 w-6" />
+              </button>
+            </div>
           </div>
         )}
 
@@ -148,6 +152,8 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
                 </div>
               )}
             </div>
+
+            <ThemeSwitch label={!isCollapsed} className={cn("w-full", isCollapsed ? "justify-center" : "justify-start px-3")} />
 
             <button 
               onClick={async () => {

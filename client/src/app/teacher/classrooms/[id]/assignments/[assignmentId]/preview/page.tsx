@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
+import { OptionValue, QuestionText, type ContentBlock } from "@/components/QuestionContentBlocks";
 import { getAssignmentByIdService, getQuestionsService } from "../../../../../assignments/assignment.service";
 
 interface Assignment {
@@ -17,6 +18,7 @@ interface Option {
   id?: string;
   value: string;
   isCorrect: boolean;
+  isCode?: boolean;
 }
 
 interface Question {
@@ -24,6 +26,7 @@ interface Question {
   type: "mcq" | "descriptive";
   description: string;
   marks: number;
+  contentBlocks?: ContentBlock[] | null;
   options: Option[];
 }
 
@@ -55,8 +58,8 @@ export default function AssignmentPreviewPage() {
     })();
   }, [assignmentId]);
 
-  if (loading) return <div className="text-gray-400 text-center py-10">Loading preview...</div>;
-  if (!assignment) return <div className="text-gray-400 text-center py-10">Assignment not found</div>;
+  if (loading) return <div className="text-gray-400 text-center py-6 sm:py-8 md:py-10">Loading preview...</div>;
+  if (!assignment) return <div className="text-gray-400 text-center py-6 sm:py-8 md:py-10">Assignment not found</div>;
 
   return (
     <div>
@@ -67,22 +70,20 @@ export default function AssignmentPreviewPage() {
         <ArrowLeft className="h-4 w-4" /> Back to Assignment
       </button>
 
-      <div className="w-full bg-[#0b0e14] border border-white/10 rounded-2xl p-8">
+      <div className="w-full bg-[#0b0e14] border border-white/10 rounded-2xl p-5 sm:p-8">
         <div className="pb-6 mb-8 border-b-2 border-orange-500 text-center">
           <h2 className="text-2xl md:text-3xl font-bold text-white tracking-tight">{assignment.title}</h2>
           {assignment.instructions && <p className="text-gray-400 text-sm mt-2">{assignment.instructions}</p>}
         </div>
 
         {questions.length === 0 ? (
-          <p className="text-gray-500 text-center py-10">No questions added yet.</p>
+          <p className="text-gray-500 text-center py-6 sm:py-8 md:py-10">No questions added yet.</p>
         ) : (
           <div className="flex flex-col gap-6">
             {questions.map((q, idx) => (
               <div key={q.id}>
                 <div className="flex items-start justify-between gap-4 mb-3">
-                  <p className="text-white text-base font-medium leading-relaxed">
-                    <span className="font-bold">Q{idx + 1}:</span> {q.description}
-                  </p>
+                  <QuestionText label={`Q${idx + 1}:`} description={q.description} blocks={q.contentBlocks} className="text-white text-base font-medium leading-relaxed" />
                   <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-orange-500/10 text-orange-400 border border-orange-500/30 shrink-0 whitespace-nowrap">
                     {q.marks} marks
                   </span>
@@ -93,7 +94,7 @@ export default function AssignmentPreviewPage() {
                     {q.options.map((o, i) => (
                       <label key={o.id || i} className="flex items-center gap-2 text-sm text-gray-300">
                         <span className="h-4 w-4 rounded-full border border-white/20 shrink-0" />
-                        {o.value}
+                        <OptionValue value={o.value} isCode={o.isCode} size="compact" />
                       </label>
                     ))}
                   </div>

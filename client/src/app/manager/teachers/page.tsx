@@ -7,8 +7,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import {
   getMyOrganisationTeachersService,
-  assignTeacherToMyOrganisationService,
+  inviteTeacherService,
+  getMyInvitesService,
+  resendInviteService,
+  revokeInviteService,
   demoteTeacherFromMyOrganisationService,
+  type TeacherInvite,
 } from "../manager.service";
 
 interface Teacher {
@@ -22,7 +26,9 @@ export default function ManagerTeachersPage() {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState("");
-  const [assigning, setAssigning] = useState(false);
+  const [inviting, setInviting] = useState(false);
+  const [invites, setInvites] = useState<TeacherInvite[]>([]);
+  const [busyInvite, setBusyInvite] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
@@ -47,21 +53,61 @@ export default function ManagerTeachersPage() {
     fetchTeachers(debouncedSearch);
   }, [debouncedSearch]);
 
-  const handleAssign = async () => {
+  // Accepted invitations are not listed: those people show up under Current Teachers.
+  const fetchInvites = async () => {
+    try {
+      setInvites((await getMyInvitesService()).filter((i) => i.status !== "accepted"));
+    } catch {
+      toast.error("Failed to load invitations");
+    }
+  };
+
+  useEffect(() => {
+    fetchInvites();
+  }, []);
+
+  const handleInvite = async () => {
     if (!email.includes("@")) {
       toast.error("Enter a valid email address");
       return;
     }
-    setAssigning(true);
+    setInviting(true);
     try {
-      await assignTeacherToMyOrganisationService(email.trim());
-      toast.success(`${email} added to your organisation`);
+      await inviteTeacherService(email.trim());
+      toast.success(`Invitation sent to ${email.trim()}`);
       setEmail("");
-      fetchTeachers(debouncedSearch);
     } catch (err: any) {
-      toast.error(err.response?.data?.message || "Failed to assign teacher");
+      toast.error(err.response?.data?.message || "Failed to send the invitation");
     } finally {
-      setAssigning(false);
+      setInviting(false);
+      fetchInvites();
+    }
+  };
+
+  const handleResend = async (invite: TeacherInvite) => {
+    setBusyInvite(invite.id);
+    try {
+      await resendInviteService(invite.id);
+      toast.success(`Invitation sent again to ${invite.email}`);
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to resend the invitation");
+    } finally {
+      setBusyInvite(null);
+      fetchInvites();
+    }
+  };
+
+  const handleCancel = async (invite: TeacherInvite) => {
+    if (!confirm(`Cancel the invitation to ${invite.email}?`)) return;
+    setBusyInvite(invite.id);
+    try {
+      await revokeInviteService(invite.id);
+      toast.success("Invitation cancelled");
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to cancel the invitation");
+    } finally {
+      setBusyInvite(null);
+      fetchInvites();
     }
   };
 
@@ -77,9 +123,9 @@ export default function ManagerTeachersPage() {
   };
 
   return (
-    <div className="p-10 h-full overflow-y-auto custom-scrollbar">
+    <div className="p-4 sm:p-6 md:p-10 h-full overflow-y-auto custom-scrollbar">
       <div className="mb-8">
-        <h2 className="text-3xl font-bold text-white tracking-tight">Teachers</h2>
+        <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Teachers</h2>
         <p className="text-gray-400 mt-1">Teachers who belong to your organisation.</p>
       </div>
 
@@ -87,28 +133,60 @@ export default function ManagerTeachersPage() {
         <CardHeader>
           <CardTitle className="text-lg font-bold text-white flex items-center gap-2">
             <UserPlus className="h-5 w-5 text-emerald-400" />
-            Add a Teacher
+            Invite a Teacher
           </CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-xs text-gray-500 mb-3">
-            Enter the email of a user in your organisation. Students are promoted to the teacher role and linked to your organisation; existing teachers are linked directly.
+            We email them a link. They join your organisation as a teacher once they accept. A teacher can only belong to one organisation.
           </p>
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <input
               type="email"
               placeholder="teacher@email.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleAssign()}
-              className="flex-1 bg-[#09090b] border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder:text-gray-600 focus:outline-none focus:ring-1 focus:ring-white/30 transition-all text-sm"
+              onKeyDown={(e) => e.key === "Enter" && handleInvite()}
+              className="flex-1 py-2.5 text-white placeholder:text-gray-600 transition-all text-sm border-b transition-colors placeholder:text-zinc-500 rounded-none border-0 border-white/20 bg-transparent px-0 focus:border-orange-500 focus:outline-none focus:ring-0"
             />
-            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white shrink-0" onClick={handleAssign} disabled={assigning}>
-              {assigning ? "Adding..." : "Add Teacher"}
+            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white shrink-0" onClick={handleInvite} disabled={inviting}>
+              {inviting ? "Sending..." : "Send Invitation"}
             </Button>
           </div>
         </CardContent>
       </Card>
+
+      {invites.length > 0 && (
+        <div className="mb-8">
+          <h3 className="text-lg font-semibold text-white mb-3">Invitations ({invites.length})</h3>
+          <div className="flex flex-col gap-2">
+            {invites.map((i) => (
+              <div key={i.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-[#0f0f11] border border-white/5 rounded-xl">
+                <div className="min-w-0">
+                  <p className="text-white font-semibold text-sm truncate">{i.email}</p>
+                  <p className={`text-xs ${i.status === "pending" ? "text-amber-300" : "text-gray-500"}`}>
+                    {i.status === "pending" && `Waiting for a reply · expires ${new Date(i.expiresAt).toLocaleDateString()}`}
+                    {i.status === "expired" && "Expired"}
+                    {i.status === "declined" && `Declined${i.respondedAt ? ` · ${new Date(i.respondedAt).toLocaleDateString()}` : ""}`}
+                  </p>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  {(i.status === "pending" || i.status === "expired") && (
+                    <Button size="sm" variant="outline" disabled={busyInvite === i.id} onClick={() => handleResend(i)} className="bg-transparent border-white/15 text-gray-200 hover:bg-white/5 h-8 px-3 text-xs font-semibold">
+                      Resend
+                    </Button>
+                  )}
+                  {(i.status === "pending" || i.status === "expired") && (
+                    <Button size="sm" variant="outline" disabled={busyInvite === i.id} onClick={() => handleCancel(i)} className="bg-transparent border-red-500/20 text-red-400 hover:bg-red-500/10 h-8 px-3 text-xs font-semibold">
+                      Cancel
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <h3 className="text-lg font-semibold text-white mb-3">Current Teachers ({teachers.length})</h3>
 
@@ -119,14 +197,14 @@ export default function ManagerTeachersPage() {
           placeholder="Search teachers by name or email..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full bg-[#14151f] border border-white/15 text-white placeholder:text-zinc-400 focus:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0 focus:border-white/30 h-11 rounded-xl text-sm transition-all shadow-inner pl-10"
+          className="w-full text-white placeholder:text-zinc-400 h-11 text-sm transition-all pl-10 border-b transition-colors placeholder:text-zinc-500 rounded-none border-0 border-white/20 bg-transparent px-0 focus:border-orange-500 focus:outline-none focus:ring-0"
         />
       </div>
 
       {loading ? (
-        <div className="text-white text-center py-10">Loading teachers...</div>
+        <div className="text-white text-center py-6 sm:py-8 md:py-10">Loading teachers...</div>
       ) : teachers.length === 0 ? (
-        <Card className="bg-[#0f0f11]/50 border-white/5 py-10 text-center">
+        <Card className="bg-[#0f0f11]/50 border-white/5 py-6 sm:py-8 md:py-10 text-center">
           <CardContent>
             <Users className="h-8 w-8 text-gray-500 mx-auto mb-3" />
             <p className="text-gray-400">

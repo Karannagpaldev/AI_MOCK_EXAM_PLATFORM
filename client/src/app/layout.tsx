@@ -1,10 +1,10 @@
-import type { Metadata } from "next";
-import { Inter, Space_Grotesk } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Inter, Space_Grotesk, Geist_Mono } from "next/font/google";
 import "katex/dist/katex.min.css";
 import "./globals.css";
-import { Toaster } from "@/components/ui/sonner";
 import { AuthInitializer } from "@/components/AuthInitializer";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { AppToaster } from "@/components/AppToaster";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -15,6 +15,19 @@ const spaceGrotesk = Space_Grotesk({
   variable: "--font-space-grotesk",
   subsets: ["latin"],
 });
+
+// Code font (font-mono in globals.css).
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+// When the on-screen keyboard opens, shrink the page to the space left above it (Chrome on Android) instead of leaving the
+// page full height and scrolling it up behind the keyboard to reach the focused field. Layouts size themselves with
+// `dvh`, which follows this.
+export const viewport: Viewport = {
+  interactiveWidget: "resizes-content",
+};
 
 export const metadata: Metadata = {
   title: "Abhyas",
@@ -31,14 +44,14 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${inter.variable} ${spaceGrotesk.variable} h-full antialiased`}
+      className={`${inter.variable} ${spaceGrotesk.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           <AuthInitializer>
             {children}
           </AuthInitializer>
-          <Toaster theme="dark" position="top-center" />
+          <AppToaster />
         </ThemeProvider>
       </body>
     </html>

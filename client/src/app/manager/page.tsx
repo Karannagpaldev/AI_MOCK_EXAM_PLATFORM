@@ -30,8 +30,8 @@ export default function ManagerDashboardPage() {
   }, []);
 
   return (
-    <div className="p-10">
-      <h2 className="text-3xl font-bold text-white tracking-tight">Welcome, {user?.name}</h2>
+    <div className="p-4 sm:p-6 md:p-10">
+      <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Welcome, {user?.name}</h2>
       <p className="text-gray-400 mt-1">Overview of your organisation.</p>
 
       <div className="grid sm:grid-cols-2 gap-4 mt-8">
@@ -56,7 +56,7 @@ export default function ManagerDashboardPage() {
           <Card className="bg-[#0f0f11] border-white/5 hover:bg-[#18181b] hover:border-white/10 transition-all cursor-pointer">
             <CardContent className="flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <div className="h-12 w-12 bg-[#18181b]merald-600/20 text-emerald-400 rounded-lg flex items-center justify-center border border-emerald-500/20">
+                <div className="h-12 w-12 bg-emerald-600/20 text-emerald-400 rounded-lg flex items-center justify-center border border-emerald-500/20">
                   <Users className="h-6 w-6" />
                 </div>
                 <div>

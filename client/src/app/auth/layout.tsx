@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
+import { ThemeSwitch } from '@/components/ThemeSwitch';
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -25,7 +26,10 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
   if (!mounted || (isInitialized && user && pathname !== '/auth/forgot-password')) return null;
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-[#050505] relative overflow-hidden font-sans">
+    <div className="min-h-dvh w-full flex items-center justify-center bg-[#050505] relative overflow-hidden font-sans">
+      <div className="absolute right-3 top-3 z-20">
+        <ThemeSwitch />
+      </div>
 
       {/* Sleek Black Grid Background */}
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#18181b_1px,transparent_1px),linear-gradient(to_bottom,#18181b_1px,transparent_1px)] bg-[size:3rem_3rem] [mask-image:radial-gradient(ellipse_80%_80%_at_50%_50%,#000_20%,transparent_100%)] opacity-30 pointer-events-none"></div>
@@ -40,7 +44,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: "easeOut" }}
-          className="bg-[#0f0f11] border border-white/10 rounded-2xl p-8 shadow-2xl shadow-black/60 relative overflow-hidden"
+          className="bg-[#0f0f11] border border-white/10 rounded-2xl p-5 sm:p-8 shadow-2xl shadow-black/60 relative overflow-hidden"
         >
           {/* Logo / Header inside the card */}
           <div className="flex flex-col items-center justify-center mb-8">

@@ -63,9 +63,9 @@ export default function GroupsPage() {
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h3 className="text-2xl font-bold text-white">Groups ({groups.length})</h3>
+          <h3 className="text-xl sm:text-2xl font-bold text-white">Groups ({groups.length})</h3>
           <p className="text-gray-400 text-base mt-1">
             Groups filter students within this classroom — assign exams/assignments to a group instead of the whole class.
           </p>
@@ -76,9 +76,9 @@ export default function GroupsPage() {
       </div>
 
       {loading ? (
-        <div className="text-gray-400 text-center py-10">Loading groups...</div>
+        <div className="text-gray-400 text-center py-6 sm:py-8 md:py-10">Loading groups...</div>
       ) : groups.length === 0 ? (
-        <Card className="bg-[#0f0f11] border-white/5 py-10 text-center">
+        <Card className="bg-[#0f0f11] border-white/5 py-6 sm:py-8 md:py-10 text-center">
           <CardContent>
             <Users className="h-8 w-8 text-gray-500 mx-auto mb-3" />
             <p className="text-gray-400">No groups yet.</p>
@@ -121,7 +121,7 @@ export default function GroupsPage() {
               value={newGroupName}
               onChange={(e) => setNewGroupName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleCreateGroup()}
-              className="w-full bg-[#09090b] border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-gray-600 focus:outline-none focus:ring-1 focus:ring-white/30 transition-all"
+              className="w-full py-3 text-white placeholder:text-gray-600 transition-all rounded-none border-0 border-b border-white/20 bg-transparent px-0 transition-colors placeholder:text-zinc-500 focus:border-orange-500 focus:outline-none focus:ring-0"
             />
           </div>
           <DialogFooter className="bg-transparent border-0 p-0 mt-2">

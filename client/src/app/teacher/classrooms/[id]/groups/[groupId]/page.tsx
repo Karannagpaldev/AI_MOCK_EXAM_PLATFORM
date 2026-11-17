@@ -173,8 +173,8 @@ export default function GroupDetailPage() {
   const memberIds = new Set(members.map((m) => m.studentId));
   const addableResults = rosterResults.filter((s) => s.status === "active" && !memberIds.has(s.studentId));
 
-  if (loading) return <div className="text-gray-400 text-center py-10">Loading group...</div>;
-  if (!group) return <div className="text-gray-400 text-center py-10">Group not found</div>;
+  if (loading) return <div className="text-gray-400 text-center py-6 sm:py-8 md:py-10">Loading group...</div>;
+  if (!group) return <div className="text-gray-400 text-center py-6 sm:py-8 md:py-10">Group not found</div>;
 
   return (
     <div>
@@ -192,16 +192,16 @@ export default function GroupDetailPage() {
             <Users className="h-6 w-6" />
           </div>
           <div className="min-w-0">
-            <h2 className="text-2xl font-bold text-white truncate">{group.name}</h2>
+            <h2 className="text-xl sm:text-2xl font-bold text-white truncate">{group.name}</h2>
             <p className="text-gray-400 text-sm mt-0.5">Manage students, assignments, and exams for this group.</p>
           </div>
         </div>
 
-        <div className="flex flex-col items-end gap-2 shrink-0">
-          <div className="flex gap-2">
+        <div className="flex flex-col sm:items-end gap-2 w-full sm:w-auto sm:shrink-0">
+          <div className="flex flex-wrap gap-2">
             <Button
               size="lg"
-              className="bg-orange-600 hover:bg-orange-700 text-white text-base px-5"
+              className="bg-orange-600 hover:bg-orange-700 text-white text-sm sm:text-base px-4 sm:px-5"
               onClick={() => router.push(`/teacher/classrooms/${classroomId}/groups/${groupId}/assignments`)}
             >
               <ClipboardList className="mr-2 h-4 w-4" /> Group Assignments
@@ -209,7 +209,7 @@ export default function GroupDetailPage() {
             <Button
               size="lg"
               variant="outline"
-              className="bg-transparent border-white/10 text-white hover:bg-white/5 text-base px-5"
+              className="bg-transparent border-white/10 text-white hover:bg-white/5 text-sm sm:text-base px-4 sm:px-5"
               onClick={() => router.push(`/teacher/classrooms/${classroomId}/groups/${groupId}/exams`)}
             >
               <FileText className="mr-2 h-4 w-4" /> Group Exams
@@ -217,7 +217,7 @@ export default function GroupDetailPage() {
           </div>
           <button
             onClick={() => router.push(`/teacher/classrooms/${classroomId}/groups/${groupId}/settings`)}
-            className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 px-3.5 py-2 rounded-lg transition-colors"
+            className="self-start sm:self-auto flex items-center gap-1.5 text-sm text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 px-3.5 py-2 rounded-lg transition-colors"
           >
             <Settings className="h-3.5 w-3.5" /> Update Group Info
           </button>
@@ -273,7 +273,7 @@ export default function GroupDetailPage() {
               placeholder="Search students..."
               value={memberSearchQuery}
               onChange={(e) => setMemberSearchQuery(e.target.value)}
-              className="w-full bg-[#14151f] border border-white/15 text-white placeholder:text-zinc-400 focus:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0 focus:border-white/30 h-11 rounded-xl text-sm transition-all shadow-inner pl-10"
+              className="w-full text-white placeholder:text-zinc-400 h-11 text-sm transition-all pl-10 rounded-none border-0 border-b border-white/20 bg-transparent px-0 transition-colors placeholder:text-zinc-500 focus:border-orange-500 focus:outline-none focus:ring-0"
             />
           </div>
 
@@ -331,7 +331,7 @@ export default function GroupDetailPage() {
               placeholder="Search by name or email..."
               value={addSearchQuery}
               onChange={(e) => setAddSearchQuery(e.target.value)}
-              className="w-full bg-[#14151f] border border-white/15 text-white placeholder:text-zinc-400 focus:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0 focus:border-white/30 h-11 rounded-xl text-sm transition-all shadow-inner pl-10"
+              className="w-full text-white placeholder:text-zinc-400 h-11 text-sm transition-all pl-10 rounded-none border-0 border-b border-white/20 bg-transparent px-0 transition-colors placeholder:text-zinc-500 focus:border-orange-500 focus:outline-none focus:ring-0"
             />
           </div>
 

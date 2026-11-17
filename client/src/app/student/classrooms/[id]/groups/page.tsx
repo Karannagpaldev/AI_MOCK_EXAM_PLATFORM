@@ -34,7 +34,7 @@ export default function StudentClassroomGroupsPage() {
     })();
   }, [classroomId]);
 
-  if (loading) return <div className="text-gray-400 text-center py-10">Loading...</div>;
+  if (loading) return <div className="text-gray-400 text-center py-6 sm:py-8 md:py-10">Loading...</div>;
 
   return (
     <div>
@@ -44,7 +44,7 @@ export default function StudentClassroomGroupsPage() {
       </div>
 
       {groups.length === 0 ? (
-        <Card className="bg-[#0f0f11] border-white/5 py-10 text-center">
+        <Card className="bg-[#0f0f11] border-white/5 py-6 sm:py-8 md:py-10 text-center">
           <CardContent>
             <Users className="h-8 w-8 text-gray-500 mx-auto mb-3" />
             <p className="text-gray-400">You're not part of any group in this classroom yet.</p>

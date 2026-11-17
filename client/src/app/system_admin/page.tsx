@@ -70,12 +70,12 @@ export default function SystemAdminDashboardPage() {
     }
   };
 
-  if (loading) return <div className="p-10 text-white">Loading...</div>;
+  if (loading) return <div className="p-4 sm:p-6 md:p-10 text-white">Loading...</div>;
 
   return (
-    <div className="flex flex-col h-full overflow-y-auto custom-scrollbar p-10">
+    <div className="flex flex-col h-full overflow-y-auto custom-scrollbar p-4 sm:p-6 md:p-10">
       <header className="mb-8">
-        <h2 className="text-3xl font-bold text-white tracking-tight flex items-center gap-3">
+        <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight flex items-center gap-3">
           <Crown className="h-8 w-8 text-red-500" />
           Manage System Admins
         </h2>
@@ -94,7 +94,7 @@ export default function SystemAdminDashboardPage() {
             </CardHeader>
             <CardContent className="p-0">
               {admins.length === 0 ? (
-                <div className="p-10 text-center text-gray-500">
+                <div className="p-4 sm:p-6 md:p-10 text-center text-gray-500">
                   No system admins found.
                 </div>
               ) : (
@@ -150,7 +150,7 @@ export default function SystemAdminDashboardPage() {
                       value={searchEmail}
                       onChange={(e) => setSearchEmail(e.target.value)}
                       placeholder="user@example.com"
-                      className="bg-[#14151f] border border-white/15 text-white placeholder:text-zinc-400 placeholder:text-gray-600 focus-visible:ring-red-500/50 flex-1"
+                      className="text-white placeholder:text-zinc-400 placeholder:text-gray-600 flex-1"
                     />
                     <Button type="submit" variant="outline" className="border-white/10 bg-white/5 text-white hover:bg-white/10">
                       <Search className="h-4 w-4" />

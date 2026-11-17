@@ -1,4 +1,5 @@
 import api from "@/utils/axios";
+import { streamPost, type ChatStreamHandlers } from "@/utils/streamPost";
 
 export type QuestionType = "mcq" | "descriptive";
 export type Difficulty = "easy" | "medium" | "hard";
@@ -52,6 +53,8 @@ export interface TopicSpecificInstruction {
 }
 
 export interface ConversationSummary {
+  // What the exam is for, in the teacher's words (empty when not given; missing on older sessions).
+  goal?: string;
   globalInstructions: string[];
   topicSpecificInstructions: TopicSpecificInstruction[];
 }
@@ -65,11 +68,12 @@ export interface ConversationAgentOutput {
 
 // Starts a new Exam Intent Agent conversation, persisted server-side. Returns
 // the sessionId to pass to continueExamIntentConversation for every reply.
+// `stream` receives the agent's question as it is written; the returned value is the finished reply.
 export const startExamIntentConversation = async (
-  examInput: ExamInput
+  examInput: ExamInput,
+  stream?: ChatStreamHandlers
 ): Promise<ConversationAgentOutput> => {
-  const res = await api.post("/generation-agents/conversation", { examInput });
-  return res.data.data;
+  return streamPost<ConversationAgentOutput>("/generation-agents/conversation", { examInput }, stream);
 };
 
 // Continues an existing conversation — the server reconstructs history from
@@ -77,28 +81,26 @@ export const startExamIntentConversation = async (
 // the wire.
 export const continueExamIntentConversation = async (
   sessionId: string,
-  message: string
+  message: string,
+  stream?: ChatStreamHandlers
 ): Promise<ConversationAgentOutput> => {
-  const res = await api.post("/generation-agents/conversation", { sessionId, message });
-  return res.data.data;
+  return streamPost<ConversationAgentOutput>("/generation-agents/conversation", { sessionId, message }, stream);
 };
 
 // "Skip Question" — the agent moves on to its next question without this
 // one being answered. Sent as a control signal, not freeform text: the
 // server substitutes its own fixed marker so the agent's behavior doesn't
 // depend on exactly how the button's click is worded.
-export const skipExamIntentQuestion = async (sessionId: string): Promise<ConversationAgentOutput> => {
-  const res = await api.post("/generation-agents/conversation", { sessionId, action: "skip_question" });
-  return res.data.data;
+export const skipExamIntentQuestion = async (sessionId: string, stream?: ChatStreamHandlers): Promise<ConversationAgentOutput> => {
+  return streamPost<ConversationAgentOutput>("/generation-agents/conversation", { sessionId, action: "skip_question" }, stream);
 };
 
 // "Skip All Questions" — ends the conversation immediately. Whatever was
 // already discussed is kept; anything not yet asked is simply left out of
 // the plan rather than guessed at. Always resolves with done: true — the
 // server guarantees this even if the agent itself doesn't comply right away.
-export const skipAllExamIntentQuestions = async (sessionId: string): Promise<ConversationAgentOutput> => {
-  const res = await api.post("/generation-agents/conversation", { sessionId, action: "skip_all" });
-  return res.data.data;
+export const skipAllExamIntentQuestions = async (sessionId: string, stream?: ChatStreamHandlers): Promise<ConversationAgentOutput> => {
+  return streamPost<ConversationAgentOutput>("/generation-agents/conversation", { sessionId, action: "skip_all" }, stream);
 };
 
 export interface AllocatedSubtopic {
@@ -137,6 +139,20 @@ export interface BlueprintStatusResponse {
   blueprintError: string | null;
 }
 
+export interface ExamIntentConversationState {
+  sessionId: string;
+  status: "in_progress" | "completed";
+  history: ConversationTurn[];
+  blueprintStatus: BlueprintStatus;
+  blueprint: ExamBlueprint | null;
+}
+
+// Reads back a saved conversation (its messages and, once made, its plan) so the chat can be restored.
+export const getExamIntentConversation = async (sessionId: string): Promise<ExamIntentConversationState> => {
+  const res = await api.get(`/generation-agents/conversation/${sessionId}`);
+  return res.data.data;
+};
+
 // Fires the subtopics pipeline (Inngest, one batch per section) for a
 // completed intent session. Returns immediately — poll getBlueprintStatus
 // for the result.
@@ -168,10 +184,10 @@ export interface BlueprintReviewTurnResult {
 export const sendBlueprintReviewTurn = async (
   sessionId: string,
   message: string,
-  sections: ExamBlueprintSection[]
+  sections: ExamBlueprintSection[],
+  stream?: ChatStreamHandlers
 ): Promise<BlueprintReviewTurnResult> => {
-  const res = await api.post("/generation-agents/review/turn", { sessionId, message, sections });
-  return res.data.data;
+  return streamPost<BlueprintReviewTurnResult>("/generation-agents/review/turn", { sessionId, message, sections }, stream);
 };
 
 export const getBlueprintReviewHistory = async (
@@ -218,19 +234,32 @@ export interface CodeContentBlock {
   code: string;
 }
 
+// Plain text, or text plus how many columns / rows the cell covers. Each row lists only the cells that start in it.
+export type TableCell = string | { text: string; colspan?: number | null; rowspan?: number | null };
+
 export interface TableContentBlock {
   type: "table";
-  headers: string[];
-  rows: string[][];
+  headers: TableCell[];
+  rows: TableCell[][];
 }
 
+// A list is plain text, one item per line ("- " bullet, "1. " number, a sub-item indented under its parent). Older lists
+// were saved as separate items with one numbered / bulleted flag.
 export interface ListContentBlock {
   type: "list";
-  ordered: boolean;
-  items: string[];
+  text?: string;
+  ordered?: boolean;
+  items?: string[];
 }
 
-export type QuestionContentBlock = CodeContentBlock | TableContentBlock | ListContentBlock;
+export interface ImageContentBlock {
+  type: "image";
+  url: string;
+  width: number | null;
+  height: number | null;
+}
+
+export type QuestionContentBlock = CodeContentBlock | TableContentBlock | ListContentBlock | ImageContentBlock;
 
 export interface GeneratedOption {
   text: string;
@@ -255,7 +284,6 @@ export interface DescriptiveGeneratedQuestion {
   topic: string;
   subtopic: string;
   question_text: string;
-  rubric: Rubric;
   marks: number;
   content_blocks: QuestionContentBlock[];
 }
@@ -322,22 +350,8 @@ export const generateTopicQuestions = async (
   return res.data.data;
 };
 
-// ── Realtime voice agents ──
+// ── Question review chat ──
 
-export type RealtimeAgentKind = "intent" | "review" | "question_review";
-
-export interface RealtimeSessionResponse {
-  sessionId: string;
-  clientSecret: string;
-  model: string;
-}
-
-// Mints a short-lived OpenAI Realtime session for one agent. For "intent"
-// with no sessionId, also creates the underlying session (same as starting
-// a text conversation). For "review", sessionId must point to a session
-// whose blueprint is already completed. For "question_review", examId must
-// point to a real, already-saved exam — it operates directly on that exam's
-// live questions, not a generation session.
 export interface QuestionReviewTurnResult {
   examId: string;
   message: string;
@@ -346,14 +360,13 @@ export interface QuestionReviewTurnResult {
   sections: any[];
 }
 
-// Text counterpart of the question review voice session, for plans without
-// the voice agent. Same agent, same tools, same edits to the saved exam.
+// One turn of the question review chat: the agent edits the saved exam and returns its fresh tree.
 export const sendQuestionReviewTurn = async (
   examId: string,
-  message: string
+  message: string,
+  stream?: ChatStreamHandlers
 ): Promise<QuestionReviewTurnResult> => {
-  const res = await api.post("/generation-agents/question-review/turn", { examId, message });
-  return res.data.data;
+  return streamPost<QuestionReviewTurnResult>("/generation-agents/question-review/turn", { examId, message }, stream);
 };
 
 export const getQuestionReviewHistory = async (
@@ -361,69 +374,4 @@ export const getQuestionReviewHistory = async (
 ): Promise<{ examId: string; history: ConversationTurn[] }> => {
   const res = await api.get(`/generation-agents/question-review/${examId}`);
   return res.data.data;
-};
-
-export const startRealtimeSession = async (
-  agent: RealtimeAgentKind,
-  opts: { sessionId?: string; examInput?: ExamInput; examId?: string } = {}
-): Promise<RealtimeSessionResponse> => {
-  const res = await api.post("/generation-agents/realtime/session", { agent, ...opts });
-  // NOTE: the server rejects this with 402 when the organisation's plan has no
-  // voice agent. Callers should hide voice controls via useEntitlements()
-  // rather than relying on the error.
-  return res.data.data;
-};
-
-export const executeIntentRealtimeTool = async (
-  sessionId: string,
-  name: string,
-  argsRaw: string
-): Promise<{ output: any; summary?: ConversationSummary }> => {
-  const res = await api.post("/generation-agents/realtime/intent/tool", { sessionId, name, argsRaw });
-  return res.data.data;
-};
-
-export interface ReviewRealtimeToolResult {
-  done: boolean;
-  output: any;
-  sections: ExamBlueprintSection[];
-  changeLog?: string[];
-  message?: string;
-}
-
-export const executeReviewRealtimeTool = async (
-  sessionId: string,
-  name: string,
-  argsRaw: string
-): Promise<ReviewRealtimeToolResult> => {
-  const res = await api.post("/generation-agents/realtime/review/tool", { sessionId, name, argsRaw });
-  return res.data.data;
-};
-
-export interface QuestionReviewRealtimeToolResult {
-  done: boolean;
-  output: any;
-  // The real exam's fresh section/block/question tree (same shape
-  // getSectionsWithDetailsService returns) — apply directly to the
-  // builder's `sections` state, no separate refetch needed.
-  sections?: any[];
-  changeLog?: string[];
-  message?: string;
-}
-
-export const executeQuestionReviewRealtimeTool = async (
-  sessionId: string,
-  name: string,
-  argsRaw: string
-): Promise<QuestionReviewRealtimeToolResult> => {
-  const res = await api.post("/generation-agents/realtime/question-review/tool", { sessionId, name, argsRaw });
-  return res.data.data;
-};
-
-export const logIntentRealtimeTurn = async (sessionId: string, role: "user" | "assistant", content: string): Promise<void> => {
-  await api.post("/generation-agents/realtime/intent/log", { sessionId, role, content });
-};
-
-export const logReviewRealtimeTurn = async (sessionId: string, role: "user" | "assistant", content: string): Promise<void> => {
-  await api.post("/generation-agents/realtime/review/log", { sessionId, role, content });
 };

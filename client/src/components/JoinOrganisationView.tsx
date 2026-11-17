@@ -71,7 +71,7 @@ export default function JoinOrganisationView() {
               onChange={(e) => setCode(e.target.value.toUpperCase())}
               onKeyDown={(e) => e.key === "Enter" && handleJoin()}
               placeholder="e.g. ABCDEF"
-              className="w-full bg-[#09090b] border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-gray-600 focus:outline-none focus:ring-1 focus:ring-white/30 transition-all uppercase tracking-widest"
+              className="w-full py-3 text-white placeholder:text-gray-600 transition-all uppercase tracking-widest rounded-none border-0 border-b border-white/20 bg-transparent px-0 transition-colors placeholder:text-zinc-500 focus:border-orange-500 focus:outline-none focus:ring-0"
             />
           </div>
           <Button

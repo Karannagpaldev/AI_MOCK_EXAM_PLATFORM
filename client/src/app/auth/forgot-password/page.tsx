@@ -105,7 +105,7 @@ export default function ForgotPasswordPage() {
                 id="email" 
                 type="email" 
                 placeholder="name@university.edu" 
-                className="w-full bg-[#14151f] border border-white/15 rounded-xl px-4 py-3 text-white placeholder:text-zinc-400 focus:outline-none focus:ring-1 focus:ring-orange-500/40 transition-all"
+                className="w-full py-3 text-white placeholder:text-zinc-400 transition-colors border-b placeholder:text-zinc-500 rounded-none border-0 border-b border-white/20 bg-transparent px-0 focus:border-orange-500 focus:border-b-2 focus:outline-none focus:ring-0"
                 {...registerEmail('email')}
               />
               {emailErrors.email && (
@@ -137,7 +137,7 @@ export default function ForgotPasswordPage() {
                 type="text" 
                 placeholder="123456" 
                 maxLength={6}
-                className="w-full bg-[#14151f] border border-white/15 rounded-xl px-4 py-3 text-white placeholder:text-zinc-400 focus:outline-none focus:ring-1 focus:ring-orange-500/40 transition-all text-center tracking-[0.5em] text-lg font-semibold"
+                className="w-full py-3 text-white placeholder:text-zinc-400 transition-all text-center tracking-[0.5em] text-lg font-semibold border-b transition-colors placeholder:text-zinc-500 rounded-none border-0 border-b border-white/20 bg-transparent px-0 focus:border-orange-500 focus:border-b-2 focus:outline-none focus:ring-0"
                 {...registerReset('otp')}
               />
               {resetErrors.otp && (
@@ -151,7 +151,7 @@ export default function ForgotPasswordPage() {
                 id="password" 
                 type="password" 
                 placeholder="••••••••" 
-                className="w-full bg-[#14151f] border border-white/15 rounded-xl px-4 py-3 text-white placeholder:text-zinc-400 focus:outline-none focus:ring-1 focus:ring-orange-500/40 transition-all"
+                className="w-full py-3 text-white placeholder:text-zinc-400 transition-colors border-b placeholder:text-zinc-500 rounded-none border-0 border-b border-white/20 bg-transparent px-0 focus:border-orange-500 focus:border-b-2 focus:outline-none focus:ring-0"
                 {...registerReset('password')}
               />
               {resetErrors.password && (

@@ -64,12 +64,12 @@ export default function StudentsPage() {
             placeholder="Search students..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-[#14151f] border border-white/15 text-white placeholder:text-zinc-400 focus:outline-none focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0 focus:border-white/30 h-11 rounded-xl text-sm transition-all shadow-inner pl-10"
+            className="w-full text-white placeholder:text-zinc-400 h-11 text-sm transition-all pl-10 rounded-none border-0 border-b border-white/20 bg-transparent px-0 transition-colors placeholder:text-zinc-500 focus:border-orange-500 focus:outline-none focus:ring-0"
           />
         </div>
 
         {loading ? (
-          <div className="text-gray-400 text-center py-10">Loading students...</div>
+          <div className="text-gray-400 text-center py-6 sm:py-8 md:py-10">Loading students...</div>
         ) : roster.length === 0 ? (
           <Card className="bg-[#0f0f11]/50 border-white/5 py-16 text-center">
             <CardContent className="flex flex-col items-center">
@@ -92,7 +92,7 @@ export default function StudentsPage() {
                         <p className="text-gray-500 text-sm truncate">{s.email}</p>
                       </div>
                     </div>
-                    <span className={`shrink-0 px-2.5 py-1 rounded-full text-xs font-semibold ${s.status === "active" ? "bg-[#18181b]merald-500/15 text-emerald-200 border border-emerald-500/30" : "bg-zinc-800 text-white/70 border border-zinc-700"}`}>
+                    <span className={`shrink-0 px-2.5 py-1 rounded-full text-xs font-semibold ${s.status === "active" ? "bg-emerald-500/15 text-emerald-200 border border-emerald-500/30" : "bg-zinc-800 text-white/70 border border-zinc-700"}`}>
                       {s.status}
                     </span>
                   </div>

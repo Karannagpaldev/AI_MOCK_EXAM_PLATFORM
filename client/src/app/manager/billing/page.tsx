@@ -205,14 +205,14 @@ export default function ManagerBillingPage() {
     }
   };
 
-  if (loading) return <div className="p-10 text-white text-center">Loading billing dashboard...</div>;
+  if (loading) return <div className="p-4 sm:p-6 md:p-10 text-white text-center">Loading billing dashboard...</div>;
 
   const isCurrent = (plan: Plan) => subscription?.planId === plan.id;
 
   return (
-    <div className="p-10 h-full overflow-y-auto custom-scrollbar">
+    <div className="p-4 sm:p-6 md:p-10 h-full overflow-y-auto custom-scrollbar">
       <div className="mb-8">
-        <h2 className="text-3xl font-bold text-white tracking-tight">Billing &amp; Usage</h2>
+        <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Billing &amp; Usage</h2>
         <p className="text-gray-400 mt-1">Your subscription, plan limits and current usage.</p>
       </div>
 
@@ -382,7 +382,7 @@ export default function ManagerBillingPage() {
                   type={type}
                   value={editForm[key]}
                   onChange={(e) => setEditForm(f => ({ ...f, [key]: e.target.value }))}
-                  className="w-full mt-1 bg-[#09090b] border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder:text-gray-600 focus:outline-none focus:ring-1 focus:ring-white/30 transition-all text-sm"
+                  className="w-full mt-1 py-2.5 text-white placeholder:text-gray-600 transition-all text-sm border-b transition-colors placeholder:text-zinc-500 rounded-none border-0 border-white/20 bg-transparent px-0 focus:border-orange-500 focus:outline-none focus:ring-0"
                 />
               </div>
             ))}
@@ -414,7 +414,7 @@ export default function ManagerBillingPage() {
                   min={0}
                   value={customForm[key]}
                   onChange={(e) => setCustomForm(f => ({ ...f, [key]: Number(e.target.value) || 0 }))}
-                  className="w-full mt-1 bg-[#09090b] border border-white/10 rounded-xl px-4 py-2.5 text-white placeholder:text-gray-600 focus:outline-none focus:ring-1 focus:ring-white/30 transition-all text-sm"
+                  className="w-full mt-1 py-2.5 text-white placeholder:text-gray-600 transition-all text-sm border-b transition-colors placeholder:text-zinc-500 rounded-none border-0 border-white/20 bg-transparent px-0 focus:border-orange-500 focus:outline-none focus:ring-0"
                 />
               </div>
             ))}
