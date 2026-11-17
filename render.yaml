@@ -1,0 +1,82 @@
+# Render Blueprint: creates the API server, the website, the database and Redis in one go.
+# See DEPLOY.md for the steps. Values marked `sync: false` are secrets Render asks you for when you create the Blueprint.
+
+databases:
+  - name: mockexam-db
+    databaseName: mockexam
+    user: mockexam
+    # The free database is deleted 30 days after it is created. Fine for a first test; change the plan in the Render
+    # dashboard before real data goes in.
+    plan: free
+
+services:
+  # Redis, used by the background job queue (BullMQ). Only reachable from inside Render.
+  - type: keyvalue
+    name: mockexam-redis
+    plan: free
+    maxmemoryPolicy: noeviction
+    ipAllowList: []
+
+  - type: web
+    name: mockexam-server
+    runtime: docker
+    dockerContext: ./server
+    dockerfilePath: ./server/Dockerfile
+    # A free web service sleeps after 15 minutes without traffic and takes about a minute to wake up.
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mockexam-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: mockexam-redis
+          property: connectionString
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      # The website's address, for example https://mockexam-client.onrender.com (no trailing slash).
+      - key: FRONTEND_URL
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: QDRANT_URL
+        sync: false
+      - key: QDRANT_API_KEY
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: EMAIL_API_KEY
+        sync: false
+      - key: INNGEST_EVENT_KEY
+        sync: false
+      - key: INNGEST_SIGNING_KEY
+        sync: false
+      # Optional. Leave these out if you don't use them.
+      - key: MISTRAL_API_KEY
+        sync: false
+      - key: MEM0_API_KEY
+        sync: false
+
+  - type: web
+    name: mockexam-client
+    runtime: node
+    rootDir: client
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    plan: free
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # The API's address plus /api, for example https://mockexam-server.onrender.com/api. It is baked in when the
+      # website is built, so after changing it the website has to be deployed again.
+      - key: NEXT_PUBLIC_API_URL
+        sync: false
