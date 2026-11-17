@@ -29,6 +29,7 @@ import { assertQuota } from "../billing/usage.service.js";
 import { z } from "zod";
 import { ApiError } from "../../common/utils/ApiError.js";
 import { getUsableBook } from "../books/book_retrieval.js";
+import { openEventStream, sendStreamError, type EventStream } from "../../common/http/sse.js";
 
 const ConversationTurnRequestZodSchema = z.object({
     // Required to start a new conversation (no sessionId); ignored once a
@@ -46,6 +47,7 @@ const ConversationTurnRequestZodSchema = z.object({
 });
 
 export const conversationTurnHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    let stream: EventStream | null = null;
     try {
         const parsed = ConversationTurnRequestZodSchema.safeParse(req.body);
         if (!parsed.success) {
@@ -84,6 +86,12 @@ export const conversationTurnHandler = async (req: Request, res: Response, next:
         const history = sessionId ? await getSessionHistory(session.id) : [];
         console.log(`[generation-agents] exam intent turn (session ${session.id}, history length: ${history.length}${action ? `, action: ${action}` : ""})`);
 
+        stream = openEventStream(res);
+        const hooks = {
+            onText: (text: string) => stream!.send({ type: "delta", text }),
+            onReset: () => stream!.send({ type: "reset" }),
+        };
+
         let result;
         if (action === "skip_all") {
             // Always ends the conversation: the summary-only call can't ask another question, and if it
@@ -93,11 +101,11 @@ export const conversationTurnHandler = async (req: Request, res: Response, next:
                 summary = await concludeExamIntent(session.examInput, history, userId);
             } catch (err) {
                 console.warn(`[generation-agents] session ${session.id} could not summarize after skip-all — falling back to an empty summary:`, err instanceof Error ? err.message : err);
-                summary = { globalInstructions: [], topicSpecificInstructions: [] };
+                summary = { goal: "", globalInstructions: [], topicSpecificInstructions: [] };
             }
             result = { done: true, message: "Got it — moving on with what you've already shared.", summary };
         } else {
-            result = await examIntentAgentTurn(session.examInput, history, userId);
+            result = await examIntentAgentTurn(session.examInput, history, userId, hooks);
         }
 
         await appendMessage(session.id, "assistant", result.message);
@@ -125,8 +133,15 @@ export const conversationTurnHandler = async (req: Request, res: Response, next:
             console.warn("[generation-agents] failed to send exam-intent trace event (Inngest dev server down?):", err?.message);
         });
 
-        res.status(200).json({ success: true, data: { sessionId: session.id, ...result } });
+        stream.send({ type: "result", data: { sessionId: session.id, ...result } });
+        stream.end();
     } catch (error) {
+        // Once the reply has started it can no longer be sent as a normal error reply, so it goes down the stream.
+        if (stream) {
+            sendStreamError(stream, error);
+            stream.end();
+            return;
+        }
         next(error);
     }
 };
@@ -187,6 +202,7 @@ const BlueprintReviewTurnRequestZodSchema = z.object({
 });
 
 export const blueprintReviewTurnHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    let stream: EventStream | null = null;
     try {
         const parsed = BlueprintReviewTurnRequestZodSchema.safeParse(req.body);
         if (!parsed.success) {
@@ -212,7 +228,13 @@ export const blueprintReviewTurnHandler = async (req: Request, res: Response, ne
 
         const generationContextBySection = buildGenerationContextBySection(session);
 
-        const result = await blueprintReviewAgentTurn(startingSections, generationContextBySection, history, message);
+        stream = openEventStream(res);
+        const hooks = {
+            onText: (text: string) => stream!.send({ type: "delta", text }),
+            onReset: () => stream!.send({ type: "reset" }),
+        };
+
+        const result = await blueprintReviewAgentTurn(startingSections, generationContextBySection, history, message, hooks);
 
         await appendReviewMessage(sessionId, "assistant", result.message);
         // Persisted every turn (not just when done) so the next turn — or a
@@ -221,14 +243,45 @@ export const blueprintReviewTurnHandler = async (req: Request, res: Response, ne
 
         console.log(`[generation-agents] blueprint review turn (session ${sessionId}, history length: ${history.length}, done: ${result.done})`);
 
-        res.status(200).json({
-            success: true,
+        stream.send({
+            type: "result",
             data: {
                 sessionId,
                 message: result.message,
                 sections: result.sections,
                 done: result.done,
                 changeLog: result.changeLog,
+            },
+        });
+        stream.end();
+    } catch (error) {
+        // Once the reply has started it can no longer be sent as a normal error reply, so it goes down the stream.
+        if (stream) {
+            sendStreamError(stream, error);
+            stream.end();
+            return;
+        }
+        next(error);
+    }
+};
+
+// Everything saved about an Exam Intent conversation, so the page can pick it up again after a refresh or a trip
+// back to the topics step: its messages, whether it has finished, and the plan if one was made from it.
+export const getConversationHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const sessionId = String(req.params.sessionId);
+        const session = await getSession(sessionId);
+        if (!session) throw ApiError.notFound("Session not found");
+        if (session.createdBy !== req.user!.id) throw ApiError.forbidden("Not your session");
+
+        res.status(200).json({
+            success: true,
+            data: {
+                sessionId: session.id,
+                status: session.status,
+                history: await getSessionHistory(session.id),
+                blueprintStatus: session.blueprintStatus,
+                blueprint: session.blueprint,
             },
         });
     } catch (error) {
@@ -309,10 +362,10 @@ const QuestionReviewTurnRequestZodSchema = z.object({
     message: z.string().min(1),
 });
 
-// Text-chat turn for the Question Review Agent — the non-voice path to the
-// same agent. Operates on the real saved exam, so the current structure is
+// Text-chat turn for the Question Review Agent. Operates on the real saved exam, so the current structure is
 // re-read each turn rather than carried in a session.
 export const questionReviewTurnHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    let stream: EventStream | null = null;
     try {
         const parsed = QuestionReviewTurnRequestZodSchema.safeParse(req.body);
         if (!parsed.success) {
@@ -328,7 +381,7 @@ export const questionReviewTurnHandler = async (req: Request, res: Response, nex
         };
 
         // Throws forbidden/not-found itself if the requester can't manage this
-        // exam — the same guard the voice session uses.
+        // exam.
         const examStructure = await getSectionsWithDetails(examId, requester);
 
         // Loaded before the new message is stored, so the agent sees the
@@ -339,7 +392,13 @@ export const questionReviewTurnHandler = async (req: Request, res: Response, nex
 
         // Trimmed for the MODEL only — the raw structure (returned below as
         // `sections`) is what the client renders and needs every field for.
-        const result = await questionReviewAgentTurn(buildQuestionReviewContext(examStructure), history, message, requester);
+        stream = openEventStream(res);
+        const hooks = {
+            onText: (text: string) => stream!.send({ type: "delta", text }),
+            onReset: () => stream!.send({ type: "reset" }),
+        };
+
+        const result = await questionReviewAgentTurn(buildQuestionReviewContext(examStructure), history, message, requester, hooks);
         await appendQuestionReviewMessage(examId, "assistant", result.message);
 
         // Re-read after the turn so the client renders what was actually
@@ -348,8 +407,8 @@ export const questionReviewTurnHandler = async (req: Request, res: Response, nex
 
         console.log(`[generation-agents] question review turn (exam ${examId}, ${result.changeLog.length} change(s), done: ${result.done})`);
 
-        res.status(200).json({
-            success: true,
+        stream.send({
+            type: "result",
             data: {
                 examId,
                 message: result.message,
@@ -358,7 +417,14 @@ export const questionReviewTurnHandler = async (req: Request, res: Response, nex
                 sections: updatedStructure,
             },
         });
+        stream.end();
     } catch (error) {
+        // Once the reply has started it can no longer be sent as a normal error reply, so it goes down the stream.
+        if (stream) {
+            sendStreamError(stream, error);
+            stream.end();
+            return;
+        }
         next(error);
     }
 };

@@ -1,7 +1,5 @@
 // Builds the minimal view of an exam's structure handed to the Question
-// Review Agent, from getSectionsWithDetails's raw output — used by both the
-// text turn handler and the realtime/voice session, so both see the same
-// trimmed shape.
+// Review Agent, from getSectionsWithDetails's raw output.
 //
 // getSectionsWithDetails returns full DB rows plus, per section, EVERY
 // question twice: once nested under its block (section.blocks[].questions)
@@ -71,8 +69,6 @@ function trimQuestion(q: RawQuestion, number: number) {
             isCorrect: o.isCorrect,
             ...(o.isCode && { isCode: true }),
         }));
-    } else if (q.rubric) {
-        trimmed.rubric = q.rubric;
     }
 
     return trimmed;

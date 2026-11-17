@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { ApiResponse } from "../../common/utils/ApiResponse.js";
 import { ApiError } from "../../common/utils/ApiError.js";
 import * as organisationService from "./organisation.service.js";
+import * as inviteService from "./invite.service.js";
 
 export const createOrganisation = async (req: Request, res: Response) => {
     const result = await organisationService.createOrganisation(req.body);
@@ -84,9 +85,40 @@ export const getMyOrganisationTeachers = async (req: Request, res: Response) => 
     return ApiResponse.ok(res, "Organisation teachers", result);
 };
 
-export const assignTeacherToMyOrganisation = async (req: Request, res: Response) => {
-    const result = await organisationService.assignTeacherToOrganisation(req.user!.organisationId!, req.body.email);
-    return ApiResponse.ok(res, "Teacher assigned to organisation", result);
+// ── Teacher invitations ──────────────────────────────────────────────────────
+export const inviteTeacher = async (req: Request, res: Response) => {
+    const result = await inviteService.inviteTeacher(req.user!.organisationId!, req.user!.id, req.body.email);
+    return ApiResponse.created(res, "Invitation sent", result);
+};
+
+export const listMyInvites = async (req: Request, res: Response) => {
+    const result = await inviteService.listInvites(req.user!.organisationId!);
+    return ApiResponse.ok(res, "Invitations", result);
+};
+
+export const resendMyInvite = async (req: Request, res: Response) => {
+    const result = await inviteService.resendInvite(req.user!.organisationId!, req.params.inviteId as string);
+    return ApiResponse.ok(res, "Invitation sent again", result);
+};
+
+export const revokeMyInvite = async (req: Request, res: Response) => {
+    await inviteService.revokeInvite(req.user!.organisationId!, req.params.inviteId as string);
+    return ApiResponse.ok(res, "Invitation cancelled", null);
+};
+
+export const getInvite = async (req: Request, res: Response) => {
+    const result = await inviteService.getInviteByToken(req.params.token as string);
+    return ApiResponse.ok(res, "Invitation", result);
+};
+
+export const acceptInvite = async (req: Request, res: Response) => {
+    const result = await inviteService.acceptInvite(req.params.token as string, req.user!.id);
+    return ApiResponse.ok(res, "You have joined the organisation", result);
+};
+
+export const declineInvite = async (req: Request, res: Response) => {
+    await inviteService.declineInvite(req.params.token as string);
+    return ApiResponse.ok(res, "Invitation declined", null);
 };
 
 export const removeTeacherFromMyOrganisation = async (req: Request, res: Response) => {

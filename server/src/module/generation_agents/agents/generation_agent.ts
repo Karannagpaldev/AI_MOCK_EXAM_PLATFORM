@@ -5,6 +5,7 @@ import { GeneratedQuestionsOutputZodSchema, type GeneratedQuestionsOutput } from
 import { getGenerationSystemPrompt } from "../../../prompts/generation_agent.prompt.js";
 import type { QuestionType, Difficulty, EducationLevel } from "../Types/inputExam.js";
 import { restoreNullBackslashes, shuffleMcqOptions } from "../question_cleanup.util.js";
+import { repairContentBlocks } from "../table_blocks.util.js";
 
 export interface GenerateTopicQuestionsInput {
     subject: string;
@@ -13,6 +14,8 @@ export interface GenerateTopicQuestionsInput {
     difficulty?: Difficulty | undefined;
     educationLevel?: EducationLevel | undefined;
     topic: string;
+    // What the teacher wants the exam to test (from the Exam Intent chat). Decides what each question asks students to do.
+    examGoal?: string | undefined;
     // Only this topic's subtopics — never other topics' data, so the model
     // can't cross-contaminate coverage between topics generated in parallel.
     subtopics: { name: string; count: number }[];
@@ -30,7 +33,7 @@ export interface GenerateTopicQuestionsInput {
  * by simply re-running the call rather than needing a separate repair pass.
  */
 export async function generateTopicQuestions(input: GenerateTopicQuestionsInput): Promise<GeneratedQuestionsOutput> {
-    const client = await getClientForModel(env.GENERATION_MODEL);
+    const client = await getClientForModel(env.GENERATION_MODEL, "question_generation");
     const expectedCount = input.subtopics.reduce((sum, s) => sum + s.count, 0);
 
     const payload = {
@@ -40,6 +43,7 @@ export async function generateTopicQuestions(input: GenerateTopicQuestionsInput)
         difficulty: input.difficulty ?? null,
         education_level: input.educationLevel?.value ?? null,
         topic: input.topic,
+        ...(input.examGoal ? { exam_goal: input.examGoal } : {}),
         subtopics: input.subtopics,
         global_instructions: input.globalInstructions,
         topic_instructions: input.topicInstructions,
@@ -64,5 +68,14 @@ export async function generateTopicQuestions(input: GenerateTopicQuestionsInput)
         );
     }
 
-    return { questions: restoreNullBackslashes(parsed.questions).map(shuffleMcqOptions) };
+    // A table whose merged cells don't add up would be drawn wrongly. Throwing would fail the whole topic and re-run the
+    // model for it, so the table is flattened to a plain one instead, and what the model sent is logged.
+    const questions = parsed.questions.map((question) => ({
+        ...question,
+        content_blocks: repairContentBlocks(question.content_blocks, (problem, original) =>
+            console.warn(`[generation] topic "${input.topic}": table didn't add up (${problem}); using a plain table. The model sent: ${JSON.stringify(original)}`)
+        ),
+    }));
+
+    return { questions: restoreNullBackslashes(questions).map(shuffleMcqOptions) };
 }

@@ -5,6 +5,7 @@ import { ApiError } from "../../common/utils/ApiError.js";
 import { PermissionService, type Requester } from "../../common/permissions/index.js";
 import type { CreateQuestionDto, UpdateQuestionDto } from "./dto/question.dto.js";
 import { uploadToCloudinary } from "../../common/config/cloudinary.js";
+import { scheduleRubrics } from "../rubrics/rubric.service.js";
 // ── Helper: verify section is manageable by the requester (creator, opted-in co-teacher, or manager) ─
 const verifySectionAccess = async (sectionId: string, requester: Requester) => {
     const [section] = await db.select({
@@ -116,6 +117,9 @@ const createQuestion = async (
             // generate-questions tool calls this function with it directly,
             // so it has to be read defensively rather than dropped.
             contentBlocks: (data as any).contentBlocks ?? [],
+            // Set by the AI paths (add-topic, the review agent) so the question stays tied to the topic it came from.
+            topic: (data as any).topic ?? null,
+            subtopic: (data as any).subtopic ?? null,
         }).returning();
 
         if (!question) throw ApiError.internal("Failed to create question");
@@ -139,6 +143,10 @@ const createQuestion = async (
 
         return { ...question, options: optionsData };
     });
+
+    // A written question comes without a grading guide; it is written in the background (nothing happens while the exam is
+    // still being built).
+    if (data.type === "descriptive" && !data.rubric) await scheduleRubrics(section.examId);
 
     return result;
 };
@@ -188,6 +196,8 @@ const updateQuestion = async (questionId: string, data: UpdateQuestionDto, reque
                 ...(data.marks && { marks: data.marks }),
                 ...(uploadedImages.length > 0 && { images: uploadedImages }),
                 ...(data.rubric !== undefined && { rubric: data.rubric }),
+                // New wording makes the old grading guide wrong, so it is cleared and written again.
+                ...(data.rubric === undefined && question.type === "descriptive" && data.description && data.description !== question.description && { rubric: null }),
                 // Not on UpdateQuestionDto yet (see contentBlocks in
                 // createQuestion above) — read defensively for the review
                 // agent's update_question tool.
@@ -253,6 +263,8 @@ const updateQuestion = async (questionId: string, data: UpdateQuestionDto, reque
         return { ...updated, options: updatedOptions };
     });
 
+    if (question.type === "descriptive" && result.rubric === null) await scheduleRubrics(question.examId);
+
     return result;
 };
 
@@ -264,4 +276,4 @@ const deleteQuestion = async (questionId: string, requester: Requester) => {
         await recalculateExamTotalMarks(question.examId, tx);
     });
 };
-export { createQuestion, getQuestionsBySection, getQuestionById, updateQuestion, deleteQuestion };
+export { createQuestion, recalculateExamTotalMarks, getQuestionsBySection, getQuestionById, updateQuestion, deleteQuestion };

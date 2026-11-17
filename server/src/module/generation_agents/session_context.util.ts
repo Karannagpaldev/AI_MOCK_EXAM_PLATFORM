@@ -1,8 +1,7 @@
 import type { ExamIntentSession } from "./exam_intent_session.schema.js";
 import type { SectionContext } from "./blueprint_edit_ops.js";
 
-// Shared by the text-based review turn handler and the realtime voice tool
-// handler — both need each section's form settings: to generate a newly added
+// Used by the review turn handler, which needs each section's form settings: to generate a newly added
 // topic's subtopics, and to report the section total against the count the
 // teacher set.
 export function buildGenerationContextBySection(session: ExamIntentSession): Record<string, SectionContext> {
@@ -14,6 +13,7 @@ export function buildGenerationContextBySection(session: ExamIntentSession): Rec
             difficulty: session.examInput.difficulty,
             educationLevel: session.examInput.educationLevel,
             globalInstructions: session.summary?.globalInstructions || [],
+            examGoal: session.summary?.goal,
             targetQuestionCount: section.question_count,
         };
     }

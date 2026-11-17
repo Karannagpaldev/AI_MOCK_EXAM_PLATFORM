@@ -1,8 +1,12 @@
 import { NonRetriableError } from "inngest";
+import { eq } from "drizzle-orm";
 import { inngest } from "../../../common/inngest/client.js";
+import db from "../../../common/db/index.js";
+import { books } from "../book.schema.js";
 import { BookInputError, extractAndStoreBlocks, indexBookWindow, mergeAndSaveIndex } from "../book_pipeline.js";
 import { markBookFailed } from "../book.service.js";
 import type { WindowResult } from "../book_windows.js";
+import { bindUsageContext, withUsageSteps } from "../../../common/agent/usage_context.js";
 
 // Windows are indexed in parallel waves of this size, which keeps a large book under the model's rate limits.
 const WINDOW_WAVE_SIZE = 6;
@@ -26,6 +30,13 @@ export const indexBookFunction = inngest.createFunction(
     },
     async ({ event, step }) => {
         const bookId = event.data.bookId as string;
+        // Indexing a book uses AI: logged against the teacher who uploaded it, and their organisation.
+        const [book] = await db.select({ createdBy: books.createdBy, organisationId: books.organisationId }).from(books).where(eq(books.id, bookId));
+        if (book) {
+            const usage = { userId: book.createdBy, organisationId: book.organisationId };
+            bindUsageContext(usage);
+            step = withUsageSteps(step, usage);
+        }
 
         try {
             const plan = await step.run("extract-blocks", async () => {

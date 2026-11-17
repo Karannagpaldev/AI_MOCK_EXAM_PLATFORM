@@ -1,6 +1,9 @@
 import type { Request, Response } from "express";
 import { ApiResponse } from "../../common/utils/ApiResponse.js";
 import * as examService from "./exam.service.js";
+import { addPaperTopicsToExam, addTopicToExam, removeTopicFromExam } from "./exam_topics.service.js";
+import { assertDocumentsReady } from "../question_bank/question_bank.controller.js";
+import { assertQuota, recordUsage } from "../billing/usage.service.js";
 
 const toRequester = (req: Request) => ({
     id: req.user!.id,
@@ -74,4 +77,31 @@ export const getMyExams = async (req: Request, res: Response) => {
         Number(req.query.limit) || 10
     );
     return ApiResponse.ok(res, "Your exams", exams);
+};
+
+export const addTopic = async (req: Request, res: Response) => {
+    const result = await addTopicToExam(req.params.id as string, req.body, toRequester(req));
+    return ApiResponse.ok(res, "Topic added", result);
+};
+
+// Adds questions from the past papers the exam was made from (no AI): the subtopics picked and how many of each.
+export const addTopicFromPapers = async (req: Request, res: Response) => {
+    // Metered like the past-paper picker: checked up front for the requested count, recorded for what was added.
+    const organisationId = req.user?.organisationId ?? null;
+    const requested = Array.isArray(req.body?.picks) ? req.body.picks.reduce((n: number, p: any) => n + (Number(p?.count) || 0), 0) : 0;
+    if (organisationId && requested > 0) await assertQuota(organisationId, "question_generation", requested);
+    const result = await addPaperTopicsToExam(req.params.id as string, req.body, toRequester(req), (ids) => assertDocumentsReady(ids, req));
+    if (organisationId) {
+        try {
+            await recordUsage(organisationId, "question_generation", result.added);
+        } catch (meterErr) {
+            console.error(`[Billing] Failed to record generation usage for org ${organisationId}:`, meterErr);
+        }
+    }
+    return ApiResponse.ok(res, "Questions added from the papers", result);
+};
+
+export const removeTopic = async (req: Request, res: Response) => {
+    const result = await removeTopicFromExam(req.params.id as string, req.body, toRequester(req));
+    return ApiResponse.ok(res, "Topic removed", result);
 };

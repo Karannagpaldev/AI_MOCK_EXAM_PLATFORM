@@ -13,6 +13,7 @@ import {
 } from "./auth.dto.js";
 import { upload } from "../../common/middleware/multer.middleware.js";
 import { rateLimit } from "express-rate-limit";
+import { loginLimiter, registerLimiter, otpLimiter } from "../../common/middleware/rate_limit.middleware.js";
 
 const resetPasswordLimiter = rateLimit({
   windowMs: 30 * 60 * 1000, // 30 minutes
@@ -24,9 +25,9 @@ const resetPasswordLimiter = rateLimit({
 
 const router = Router();
 
-router.post("/register", validate(registerSchema), controller.register);
-router.post("/login", validate(loginSchema), controller.login);
-router.post("/verify-otp", validate(verifyOtpSchema), controller.verifyOtp);
+router.post("/register", registerLimiter, validate(registerSchema), controller.register);
+router.post("/login", loginLimiter, validate(loginSchema), controller.login);
+router.post("/verify-otp", otpLimiter, validate(verifyOtpSchema), controller.verifyOtp);
 router.post(
   "/resend-otp",
   resetPasswordLimiter,

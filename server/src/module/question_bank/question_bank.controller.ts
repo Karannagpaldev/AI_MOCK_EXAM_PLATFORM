@@ -17,9 +17,11 @@ import {
 } from "./question_bank.service.js";
 import { deleteQuestionBankPointsByDocument, type QuestionBankAccess } from "./qdrant_client.js";
 import { questionBankVisibilityEnum } from "./question_bank.schema.js";
-import { generateQuestionsFromDocuments } from "./question_bank_generator.js";
+import { generateQuestionsFromDocuments, listTopicsForDocuments } from "./question_bank_generator.js";
+import { getPaperTopicView, pickQuestionsFromPapers } from "./question_bank_picker.js";
+import { examQuestionTexts } from "../exam/exam_topics.service.js";
 import { assertQuota, recordUsage } from "../billing/usage.service.js";
-import { QuestionTypeZodEnum, DifficultyZodEnum } from "../generation_agents/Types/inputExam.js";
+import { QuestionTypeZodEnum } from "../generation_agents/Types/inputExam.js";
 
 const accessOf = (req: Request): QuestionBankAccess => ({
     userId: req.user!.id,
@@ -63,7 +65,18 @@ export const uploadDocumentHandler = async (req: Request, res: Response, next: N
             throw ApiError.badRequest("You must belong to an organisation before sharing a document with it");
         }
 
-        const uploaded = await uploadRawToCloudinary(req.file.buffer, "question-bank/documents");
+        let uploaded;
+        try {
+            uploaded = await uploadRawToCloudinary(req.file.buffer, "question-bank/documents");
+        } catch (uploadError: any) {
+            // The file storage has its own size cap, set by its plan, which can be lower than the limit above.
+            const tooLarge = /Got (\d+)\. Maximum is (\d+)/.exec(String(uploadError?.message ?? ""));
+            if (tooLarge) {
+                const mb = (bytes: string) => Math.round((Number(bytes) / (1024 * 1024)) * 10) / 10;
+                throw ApiError.badRequest(`This PDF is ${mb(tooLarge[1]!)} MB, but the file storage only accepts files up to ${mb(tooLarge[2]!)} MB. Compress the PDF or split it into smaller parts.`);
+            }
+            throw uploadError;
+        }
         const title = typeof req.body?.title === "string" && req.body.title.trim() ? req.body.title.trim() : req.file.originalname;
 
         const document = await createDocument({
@@ -185,7 +198,7 @@ export const setDocumentVisibilityHandler = async (req: Request, res: Response, 
     }
 };
 
-async function assertDocumentsReady(documentIds: string[], req: Request) {
+export async function assertDocumentsReady(documentIds: string[], req: Request) {
     const documents = await getDocumentsByIds(documentIds);
     if (documents.length !== documentIds.length) throw ApiError.notFound("One or more documents were not found");
     // Generation feeds these documents' contents into the response, so the
@@ -194,20 +207,25 @@ async function assertDocumentsReady(documentIds: string[], req: Request) {
     for (const document of documents) assertCanAccessDocument(document, req);
     const notReady = documents.find((d) => d.status !== "completed");
     if (notReady) throw ApiError.badRequest(`Document "${notReady.title}" is still processing`);
+    return documents;
 }
 
 const GenerateFromDocumentsRequestZodSchema = z.object({
     documentIds: z.array(z.string()).min(1),
-    topics: z.object({
-        high: z.array(z.string()).default([]),
-        mid: z.array(z.string()).default([]),
-        low: z.array(z.string()).default([]),
-    }),
-    difficulty: DifficultyZodEnum,
-    questionCount: z.number().int().min(1).max(50),
+    topics: z
+        .array(
+            z.object({
+                topic: z.string().trim().min(1).max(200),
+                count: z.number().int().min(1).max(50),
+                fromPapers: z.boolean().default(false),
+            })
+        )
+        .min(1)
+        .max(30),
+    goal: z.string().trim().max(500).optional(),
     questionType: QuestionTypeZodEnum,
     marks: z.number().positive(),
-});
+}).refine((data) => data.topics.reduce((n, t) => n + t.count, 0) <= 100, { message: "At most 100 questions can be requested at once", path: ["topics"] });
 
 export const generateFromDocumentsHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -225,7 +243,7 @@ export const generateFromDocumentsHandler = async (req: Request, res: Response, 
         // when there are more topics than questions).
         const organisationId = req.user?.organisationId ?? null;
         if (organisationId) {
-            await assertQuota(organisationId, "question_generation", parsed.data.questionCount);
+            await assertQuota(organisationId, "question_generation", parsed.data.topics.reduce((n, t) => n + t.count, 0));
         }
 
         const groups = await generateQuestionsFromDocuments(parsed.data, accessOf(req));
@@ -240,6 +258,21 @@ export const generateFromDocumentsHandler = async (req: Request, res: Response, 
         }
 
         res.json({ success: true, data: { groups } });
+    } catch (err) {
+        next(err);
+    }
+};
+
+// The topics found in the selected papers, with how many questions of each type they have.
+export const listTopicsHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const raw = typeof req.query.documentIds === "string" ? req.query.documentIds : "";
+        const documentIds = raw.split(",").map((id) => id.trim()).filter(Boolean);
+        if (documentIds.length === 0) throw ApiError.badRequest("documentIds is required");
+
+        await assertDocumentsReady(documentIds, req);
+
+        res.json({ success: true, data: await listTopicsForDocuments(documentIds) });
     } catch (err) {
         next(err);
     }
@@ -267,6 +300,74 @@ export const searchQuestionBankHandler = async (req: Request, res: Response, nex
         });
 
         res.json({ success: true, data: results });
+    } catch (err) {
+        next(err);
+    }
+};
+
+// One paper's broad topics and subtopics, counted for one question type, for the topic picker.
+export const getPaperTopicsHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const questionType = QuestionTypeZodEnum.safeParse(req.query.questionType);
+        if (!questionType.success) throw ApiError.badRequest("questionType must be mcq or descriptive");
+
+        const [document] = await assertDocumentsReady([String(req.params.documentId)], req);
+        // Opened from an exam's topic picker: questions already in that exam are counted as in it, not as available.
+        const examId = typeof req.query.examId === "string" && req.query.examId ? req.query.examId : null;
+        const exclude = examId ? await examQuestionTexts(examId, { id: req.user!.id, role: req.user!.role, organisationId: req.user!.organisationId ?? null }) : undefined;
+        res.json({ success: true, data: await getPaperTopicView(document!, questionType.data, exclude) });
+    } catch (err) {
+        next(err);
+    }
+};
+
+const PickQuestionsRequestZodSchema = z.object({
+    picks: z
+        .array(
+            z.object({
+                documentId: z.string().min(1),
+                subtopic: z.string().trim().min(1).max(200),
+                count: z.number().int().min(1).max(50),
+                // Which exam section the pick is for, when several are built at once.
+                section: z.string().trim().min(1).max(100).optional(),
+            })
+        )
+        .min(1)
+        .max(60),
+    goal: z.string().trim().max(500).optional(),
+    questionType: QuestionTypeZodEnum,
+    marks: z.number().positive(),
+}).refine((data) => data.picks.reduce((n, p) => n + p.count, 0) <= 100, { message: "At most 100 questions can be requested at once", path: ["picks"] });
+
+// Fills the picks (paper + subtopic + how many) chosen in the topic picker with real questions from the papers.
+export const pickQuestionsHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+        const parsed = PickQuestionsRequestZodSchema.safeParse(req.body);
+        if (!parsed.success) {
+            const issues = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
+            throw ApiError.badRequest(`Invalid request body: ${issues}`);
+        }
+
+        const documentIds = [...new Set(parsed.data.picks.map((p) => p.documentId))];
+        const documents = await assertDocumentsReady(documentIds, req);
+
+        // Metered like /generate: checked up front for the requested count, recorded for what was actually found.
+        const requested = parsed.data.picks.reduce((n, p) => n + p.count, 0);
+        const organisationId = req.user?.organisationId ?? null;
+        if (organisationId) await assertQuota(organisationId, "question_generation", requested);
+
+        const result = await pickQuestionsFromPapers(parsed.data, documents);
+
+        if (organisationId) {
+            const found = result.groups.reduce((n, group) => n + group.questions.length, 0);
+            try {
+                await recordUsage(organisationId, "question_generation", found);
+            } catch (meterErr) {
+                console.error(`[Billing] Failed to record generation usage for org ${organisationId}:`, meterErr);
+            }
+        }
+
+        res.json({ success: true, data: result });
     } catch (err) {
         next(err);
     }

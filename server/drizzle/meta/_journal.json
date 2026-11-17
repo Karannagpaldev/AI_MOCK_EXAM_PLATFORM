@@ -253,6 +253,90 @@
       "when": 1788069787760,
       "tag": "0034_books",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1788069847760,
+      "tag": "0035_question_topics",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1788156247760,
+      "tag": "0036_exam_registrations",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1788242647760,
+      "tag": "0037_exam_evaluation_scheme",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1788329047760,
+      "tag": "0038_organisation_invites",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1788415447760,
+      "tag": "0039_question_bank_topic_tree",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1788501847760,
+      "tag": "0040_question_bank_answer_source",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1794500042000,
+      "tag": "0041_question_bank_progress",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1794500043000,
+      "tag": "0042_exam_source_documents",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1794500044000,
+      "tag": "0043_exam_ai_evaluation",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1794500045000,
+      "tag": "0044_assignment_question_details",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1794500046000,
+      "tag": "0045_assignment_ai_evaluation",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1794500047000,
+      "tag": "0046_ai_usage_log",
+      "breakpoints": true
     }
   ]
 }

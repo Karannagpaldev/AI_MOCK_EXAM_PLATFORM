@@ -13,6 +13,9 @@ router.get("/", authenticate, authorize("teacher"), controller.getExams);
 router.get("/me", authenticate, authorize("student"), controller.getMyExams);
 router.get("/classroom/:classroomId", authenticate, authorize("teacher", "manager"), controller.listExamsForClassroom);
 router.get("/:id", authenticate, authorize("teacher", "manager"), controller.getExamById);
+router.post("/:id/topics", authenticate, authorize("teacher", "manager"), controller.addTopic);
+router.post("/:id/topics/from-papers", authenticate, authorize("teacher", "manager"), controller.addTopicFromPapers);
+router.post("/:id/topics/remove", authenticate, authorize("teacher", "manager"), controller.removeTopic);
 router.patch("/:id", authenticate, authorize("teacher", "manager"), validate(updateExamSchema), controller.updateExam);
 router.delete("/:id", authenticate, authorize("teacher", "manager"), controller.deleteExam);
 

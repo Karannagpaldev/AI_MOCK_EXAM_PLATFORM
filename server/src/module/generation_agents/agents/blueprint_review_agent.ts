@@ -1,4 +1,5 @@
 import { getClientForModel, toolCallParams } from "../../../common/agent/openai.client.js";
+import { streamChatCompletion, type StreamHooks } from "../../../common/agent/stream.js";
 import { restoreNullBackslashes } from "../question_cleanup.util.js";
 import { env } from "../../../env.js";
 import { zodFunction } from "openai/helpers/zod";
@@ -110,9 +111,10 @@ export async function blueprintReviewAgentTurn(
     sections: ExamBlueprintSection[],
     generationContextBySection: Record<string, SectionContext>,
     history: ConversationTurn[],
-    userMessage: string
+    userMessage: string,
+    hooks?: StreamHooks
 ): Promise<BlueprintReviewResult> {
-    const client = await getClientForModel(env.GENERATION_MODEL);
+    const client = await getClientForModel(env.GENERATION_MODEL, "blueprint_review");
 
     let currentSections = sections;
     const allChangeLog: string[] = [];
@@ -126,16 +128,22 @@ export async function blueprintReviewAgentTurn(
     ];
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-        const response = await client.chat.completions.create({
-            model: env.GENERATION_MODEL,
-            messages,
-            tools,
-            tool_choice: "auto",
-            ...toolCallParams(env.GENERATION_MODEL),
-        });
+        // Streamed, so the teacher reads the reply as it is written. Tool calls are put together from the pieces they
+        // arrive in and then handled exactly as before.
+        const streamed = await streamChatCompletion(
+            client,
+            {
+                model: env.GENERATION_MODEL,
+                messages,
+                tools,
+                tool_choice: "auto",
+                ...toolCallParams(env.GENERATION_MODEL),
+            },
+            hooks
+        );
 
-        const choice = response.choices[0]?.message;
-        const toolCalls = choice?.tool_calls || [];
+        const choice = { content: streamed.content || null };
+        const toolCalls = streamed.toolCalls;
 
         if (toolCalls.length === 0) {
             return {

@@ -5,6 +5,7 @@ import { classrooms } from "../classrooms/classroom.schema.js";
 import { groups } from "../groups/group.schema.js";
 import { questionTypeEnum } from "../questions/question-type.enum.js";
 import { blocks } from "../blocks/block.schema.js";
+import type { QuestionContentBlock } from "../questions/question.schema.js";
 
 // weekly = dates computed per student, relative to their enrollment date
 // (chained via dayGap/unlockOffsetDays). custom = teacher sets a fixed
@@ -48,6 +49,14 @@ export const assignments = pgTable("assignments", {
   sequenceOrder: integer("sequence_order"),
   dayGap: integer("day_gap"),
   unlockOffsetDays: integer("unlock_offset_days"),
+  // "Evaluate written answers with AI" on the publish step. Off: written answers wait for the teacher to grade them.
+  // MCQs are marked by comparing with the correct option either way, never by AI.
+  aiEvaluation: boolean("ai_evaluation").default(true).notNull(),
+  // How the teacher marks written answers, in their own words. The written questions' grading guides are written from it.
+  evaluationScheme: text("evaluation_scheme"),
+  // Whether the written questions' grading guides are ready. "pending" holds AI grading back (answers wait in
+  // "evaluating"); "failed" means they could not be written, and answers are then graded without them.
+  rubricStatus: text("rubric_status").$type<"pending" | "ready" | "failed">().default("ready").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -59,7 +68,14 @@ export const assignmentQuestions = pgTable("assignment_questions", {
   blockId: text("block_id").references(() => blocks.id, { onDelete: "cascade" }),
   type: questionTypeEnum("type").notNull(),
   description: text("description").notNull(),
+  // The question's place in the assignment, from 0. Questions copied from an exam keep the exam's order.
+  position: integer("position").default(0).notNull(),
   images: jsonb("images").$type<{ url: string; publicId: string }[]>(),
+  // Code, tables, lists and pictures shown under the question text, as on an exam question.
+  contentBlocks: jsonb("content_blocks").$type<QuestionContentBlock[]>().default([]).notNull(),
+  // The topic and subtopic the question was made for, copied from the exam. Null for questions written by hand.
+  topic: text("topic"),
+  subtopic: text("subtopic"),
   marks: doublePrecision("marks").notNull(),
   modelAnswer: text("model_answer"),
   rubric: jsonb("rubric").$type<{ categories: { name: string; weight: number; key_points: string[] }[] }>(),
@@ -72,6 +88,8 @@ export const assignmentOptions = pgTable("assignment_options", {
   questionId: text("question_id").references(() => assignmentQuestions.id, { onDelete: "cascade" }).notNull(),
   value: text("value").notNull(),
   isCorrect: boolean("is_correct").notNull(),
+  // The option is shown as code (exact spacing, code font), as on an exam option.
+  isCode: boolean("is_code").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

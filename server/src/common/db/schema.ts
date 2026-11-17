@@ -1,5 +1,6 @@
 export * from "../../module/auth/user.schema.js";
 export * from "../../module/organisations/organisation.schema.js";
+export * from "../../module/organisations/invite.schema.js";
 export * from "../../module/classrooms/classroom.schema.js";
 export * from "../../module/groups/group.schema.js";
 export * from "../../module/assignments/assignment.schema.js";
@@ -16,3 +17,4 @@ export * from "../../module/questions/question-type.enum.js";
 export * from "../../module/generation_agents/exam_intent_session.schema.js";
 export * from "../../module/question_bank/question_bank.schema.js";
 export * from "../../module/books/book.schema.js";
+export * from "../../module/ai_usage/ai_usage.schema.js";

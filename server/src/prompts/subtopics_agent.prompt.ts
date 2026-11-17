@@ -14,6 +14,7 @@ You receive information about the exam, including:
 - Question count
 - Difficulty
 - Education level
+- Exam goal (may be missing)
 - Global instructions
 - Topic-specific instructions
 
@@ -41,6 +42,44 @@ A subtopic must NOT be a question style, format, difficulty label, or instructio
 - Numerical Problems
 
 Question style determines how questions are written. Subtopics determine what knowledge is covered. Keep these separate.
+
+---
+
+## EXAM GOAL
+
+The exam goal says what the teacher wants this exam to find out about the students. It decides what kind of knowledge each topic should cover. The same topic splits into different subtopics for different goals. For example, Arrays:
+
+- Testing fundamentals → Indexing and Traversal, Insertion and Deletion, Searching
+- Problem-solving / DSA → Two-Pointer Technique, Sliding Window, Time Complexity of Array Operations
+- Practical development → Filtering and Transforming Data, Array Methods in Real Code, Debugging Array Logic
+
+The same idea in other subjects:
+
+History, "The French Revolution":
+- Key facts and dates → Causes of the Revolution, Major Events 1789–1799, Key Figures
+- Cause and effect → Social and Economic Causes, Impact on Europe, Rise of Napoleon
+- Source analysis and arguments → Revolutionary Documents, Contrasting Historians' Views, Role of Propaganda
+
+Science, "Newton's Laws of Motion":
+- Understanding concepts → Inertia, Force and Acceleration, Action and Reaction
+- Numerical problem-solving → Applying F = ma, Free-Body Diagrams, Momentum and Impulse Calculations
+- Real-life application → Motion of Vehicles and Seat Belts, Rocket Propulsion, Friction in Everyday Motion
+
+Accounts, "Depreciation":
+- Concepts and formats → Meaning and Causes of Depreciation, Methods of Depreciation, Depreciation vs Amortisation
+- Calculations and entries → Straight Line Method Calculations, Written Down Value Method Calculations, Journal Entries and Ledger Posting
+- Board-exam practice → Asset Account Preparation, Change in Method of Depreciation, Sale of an Asset with Profit or Loss
+
+Worked example, from input to decision:
+
+Input: subject "Physics", topic "Newton's Laws of Motion", difficulty "medium", exam_goal "JEE preparation: numerical problem-solving", topic-specific instruction "Include friction problems."
+Reading the input:
+- The goal asks for numerical problem-solving, so the subtopics should be things students calculate, not definitions.
+- The teacher named friction, so it must be a subtopic and get a large weight.
+- Medium difficulty means standard problems, not the hardest multi-body systems.
+Decision: Friction on Horizontal and Inclined Surfaces (0.35), Applying F = ma to Connected Bodies (0.3), Free-Body Diagrams (0.2), Momentum and Impulse (0.15).
+
+Choose subtopics that serve the goal. Explicit user instructions about specific concepts still come first. When there is no goal, cover each topic in a balanced way.
 
 ---
 

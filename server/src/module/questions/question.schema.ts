@@ -16,19 +16,35 @@ export interface CodeContentBlock {
   code: string;
 }
 
+// A cell is plain text, or text plus how many columns / rows it covers (like HTML's colspan and rowspan). Each row lists
+// only the cells that start in it; a cell merged down from a row above is left out of the rows below it.
+export type TableCell = string | { text: string; colspan?: number | null; rowspan?: number | null };
+
 export interface TableContentBlock {
   type: "table";
-  headers: string[];
-  rows: string[][];
+  headers: TableCell[];
+  rows: TableCell[][];
 }
 
+// A list is written as plain text, one item per line ("- " for a bullet, "1. " for a number, a sub-item indented under
+// its parent), and the page draws the bullets, numbers and indentation. Older lists were saved as separate items with a
+// single numbered / bulleted flag, so those fields stay for reading them.
 export interface ListContentBlock {
   type: "list";
-  ordered: boolean;
-  items: string[];
+  text?: string;
+  ordered?: boolean;
+  items?: string[];
 }
 
-export type QuestionContentBlock = CodeContentBlock | TableContentBlock | ListContentBlock;
+// A picture from the question's source paper (a figure, graph or diagram the question refers to).
+export interface ImageContentBlock {
+  type: "image";
+  url: string;
+  width: number | null;
+  height: number | null;
+}
+
+export type QuestionContentBlock = CodeContentBlock | TableContentBlock | ListContentBlock | ImageContentBlock;
 
 export const questions = pgTable("questions", {
   id: text("id").primaryKey().$defaultFn(() => createId()),
@@ -50,6 +66,10 @@ export const questions = pgTable("questions", {
   // Ordered — rendered in this sequence, after the description and before
   // the options. Empty for the overwhelming majority of questions.
   contentBlocks: jsonb("content_blocks").$type<QuestionContentBlock[]>().default([]).notNull(),
+  // The topic and subtopic this question was generated for. Null for questions written by hand and for exams made
+  // before topics were tracked. Removing a topic from an exam deletes the questions that carry its name.
+  topic: text("topic"),
+  subtopic: text("subtopic"),
   marks: doublePrecision("marks").notNull(),
   modelAnswer: text("model_answer"),
   rubric: jsonb("rubric").$type<{

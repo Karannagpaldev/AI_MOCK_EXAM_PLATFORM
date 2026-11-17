@@ -3,7 +3,8 @@ import * as controller from "./organisation.controller.js";
 import validate from "../../common/middleware/validate.middleware.js";
 import { authenticate, authorize } from "../../common/middleware/auth.middleware.js";
 import { upload } from "../../common/middleware/multer.middleware.js";
-import { createOrganisationSchema, assignUserSchema, assignManagerSchema, assignTeacherSchema, joinOrganisationSchema, updateOrganisationSchema } from "./dto/organisation.dto.js";
+import { inviteLimiter } from "../../common/middleware/rate_limit.middleware.js";
+import { createOrganisationSchema, assignUserSchema, assignManagerSchema, inviteTeacherSchema, joinOrganisationSchema, updateOrganisationSchema } from "./dto/organisation.dto.js";
 
 const router = Router();
 
@@ -32,7 +33,17 @@ router.delete("/:id/managers/:userId", authenticate, authorize("system_admin"), 
 
 // Manager-scoped: manage teachers within their own organisation (implicit via req.user.organisationId)
 router.get("/mine/teachers", authenticate, authorize("manager"), controller.getMyOrganisationTeachers);
-router.post("/mine/teachers", authenticate, authorize("manager"), validate(assignTeacherSchema), controller.assignTeacherToMyOrganisation);
+
+// Manager-scoped: invite teachers by email. They accept or decline from the link in the email.
+router.get("/mine/invites", authenticate, authorize("manager"), controller.listMyInvites);
+router.post("/mine/invites", authenticate, authorize("manager"), validate(inviteTeacherSchema), controller.inviteTeacher);
+router.post("/mine/invites/:inviteId/resend", authenticate, authorize("manager"), controller.resendMyInvite);
+router.delete("/mine/invites/:inviteId", authenticate, authorize("manager"), controller.revokeMyInvite);
+
+// The invited person: look at the invitation (no sign-in needed), accept it (signed in as the invited address), or decline it.
+router.get("/invites/:token", inviteLimiter, controller.getInvite);
+router.post("/invites/:token/accept", inviteLimiter, authenticate, controller.acceptInvite);
+router.post("/invites/:token/decline", inviteLimiter, controller.declineInvite);
 router.delete("/mine/teachers/:userId", authenticate, authorize("manager"), controller.removeTeacherFromMyOrganisation);
 router.delete("/mine/teachers/:userId/demote", authenticate, authorize("manager"), controller.demoteTeacherFromMyOrganisation);
 

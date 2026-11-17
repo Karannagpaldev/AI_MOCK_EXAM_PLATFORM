@@ -1,4 +1,4 @@
-import { eq, and, or, inArray, isNull, ilike, desc, count, lt, gt, lte, gte } from "drizzle-orm";
+import { eq, and, or, inArray, isNull, ilike, asc, desc, count, lt, gt, lte, gte } from "drizzle-orm";
 import db from "../../common/db/index.js";
 import {
     assignments,
@@ -13,11 +13,20 @@ import {
     users,
     classrooms,
     blocks,
+    exams,
+    sections,
+    questions,
+    options,
 } from "../../common/db/schema.js";
 import { ApiError } from "../../common/utils/ApiError.js";
 import { PermissionService } from "../../common/permissions/index.js";
-import { assertQuota, recordUsage } from "../billing/usage.service.js";
-import { evaluateAnswer, type TextAnswer } from "../evalutaion/evalutaion.js";
+import { isBlankAnswer, type EvaluationOutcome, type TextAnswer } from "../evalutaion/evalutaion.js";
+import { gradeAnswers } from "../evalutaion/grading.js";
+import { organisationGradeGate } from "../billing/grading_gate.js";
+import { enqueueEvaluation } from "../../common/queue/queues.js";
+import { scheduleAssignmentRubrics } from "../rubrics/rubric.service.js";
+import { bindUsageContext } from "../../common/agent/usage_context.js";
+import { assignmentUsageContext } from "../ai_usage/ai_usage.service.js";
 import type {
     CreateSeriesDto,
     UpdateSeriesDto,
@@ -31,6 +40,9 @@ import type {
 } from "./dto/assignment.dto.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Shown whenever a student tries to start, answer or submit an assignment after its due date.
+export const SUBMISSION_CLOSED_MESSAGE = "The submission date has passed. This assignment can no longer be submitted.";
 
 // ── Validate Classroom/Group Scope ─────────────────────────────────────────────
 const validateAssignmentScope = async (classroomId: string, groupId: string | null | undefined, teacherId: string) => {
@@ -96,7 +108,12 @@ const deleteSeries = async (seriesId: string, teacherId: string) => {
     const hasAccess = await PermissionService.teacher.canManageClassroom(teacherId, series.classroomId);
     if (!hasAccess) throw ApiError.forbidden("You are not authorized to delete this series");
 
-    await db.delete(assignmentSeries).where(eq(assignmentSeries.id, seriesId));
+    // Blocks point at their assignment without a database link, so they are removed here.
+    const seriesAssignments = await db.select({ id: assignments.id }).from(assignments).where(eq(assignments.seriesId, seriesId));
+    await db.transaction(async (tx) => {
+        if (seriesAssignments.length > 0) await tx.delete(blocks).where(inArray(blocks.assignmentId, seriesAssignments.map((a) => a.id)));
+        await tx.delete(assignmentSeries).where(eq(assignmentSeries.id, seriesId));
+    });
 };
 
 // ── Create Assignment ────────────────────────────────────────────────────────
@@ -160,6 +177,7 @@ const createAssignment = async (data: CreateAssignmentDto, teacherId: string) =>
     if (blocksToPersist && blocksToPersist.length > 0) {
         await db.transaction(async (tx) => {
             let totalMarks = 0;
+            let position = 0;
             for (const [bIdx, blockData] of blocksToPersist.entries()) {
                 const [block] = await tx.insert(blocks).values({
                     assignmentId: assignment.id,
@@ -178,6 +196,7 @@ const createAssignment = async (data: CreateAssignmentDto, teacherId: string) =>
                     const [question] = await tx.insert(assignmentQuestions).values({
                         assignmentId: assignment.id,
                         blockId: block.id,
+                        position: position++,
                         type: qData.type,
                         description: qData.description,
                         marks: qData.marks,
@@ -334,6 +353,12 @@ const updateAssignment = async (assignmentId: string, data: UpdateAssignmentDto,
         .where(eq(assignments.id, assignmentId))
         .returning();
 
+    // A changed marking scheme rewrites every written question's guide; turning AI evaluation on writes the missing ones.
+    if (updated && (data.aiEvaluation !== undefined || data.evaluationScheme !== undefined)) {
+        const schemeChanged = data.evaluationScheme !== undefined && (data.evaluationScheme ?? null) !== (existing.evaluationScheme ?? null);
+        await scheduleAssignmentRubrics(assignmentId, { regenerateAll: schemeChanged });
+    }
+
     return updated;
 };
 
@@ -342,7 +367,11 @@ const deleteAssignment = async (assignmentId: string, teacherId: string) => {
     const hasAccess = await PermissionService.teacher.canManageAssignment(teacherId, assignmentId);
     if (!hasAccess) throw ApiError.forbidden("You are not authorized to delete this assignment");
 
-    await db.delete(assignments).where(eq(assignments.id, assignmentId));
+    // Blocks point at their assignment without a database link, so they are removed here.
+    await db.transaction(async (tx) => {
+        await tx.delete(blocks).where(eq(blocks.assignmentId, assignmentId));
+        await tx.delete(assignments).where(eq(assignments.id, assignmentId));
+    });
 };
 
 // ── List Assignments (for a classroom, teacher) ──────────────────────────────
@@ -441,8 +470,16 @@ const createQuestion = async (data: CreateAssignmentQuestionDto, teacherId: stri
     if (!hasAccess) throw ApiError.forbidden("You are not authorized to add questions to this assignment");
 
     const result = await db.transaction(async (tx) => {
+        // Added at the end, in the section (block) of the last question when the assignment has sections.
+        const [last] = await tx.select({ position: assignmentQuestions.position, blockId: assignmentQuestions.blockId })
+            .from(assignmentQuestions)
+            .where(eq(assignmentQuestions.assignmentId, data.assignmentId))
+            .orderBy(desc(assignmentQuestions.position))
+            .limit(1);
         const [question] = await tx.insert(assignmentQuestions).values({
             assignmentId: data.assignmentId,
+            blockId: last?.blockId ?? null,
+            position: last ? last.position + 1 : 0,
             type: data.type,
             description: data.description,
             marks: data.marks,
@@ -468,12 +505,13 @@ const createQuestion = async (data: CreateAssignmentQuestionDto, teacherId: stri
         return { ...question, options: optionsData };
     });
 
+    if (result.type === "descriptive") await scheduleAssignmentRubrics(data.assignmentId);
     return result;
 };
 
 // ── Update Question (with smart options merge) ───────────────────────────────
 const updateQuestion = async (questionId: string, data: UpdateAssignmentQuestionDto, teacherId: string) => {
-    await verifyQuestionOwnership(questionId, teacherId);
+    const existing = await verifyQuestionOwnership(questionId, teacherId);
 
     const result = await db.transaction(async (tx) => {
         const [updated] = await tx.update(assignmentQuestions)
@@ -482,6 +520,8 @@ const updateQuestion = async (questionId: string, data: UpdateAssignmentQuestion
                 ...(data.marks && { marks: data.marks }),
                 ...(data.modelAnswer !== undefined && { modelAnswer: data.modelAnswer }),
                 ...(data.images && { images: data.images }),
+                // Reworded: its grading guide no longer fits and is written again.
+                ...(existing.type === "descriptive" && data.description && data.description !== existing.description && { rubric: null }),
                 updatedAt: new Date(),
             })
             .where(eq(assignmentQuestions.id, questionId))
@@ -522,6 +562,7 @@ const updateQuestion = async (questionId: string, data: UpdateAssignmentQuestion
         return { ...updated, options: updatedOptions };
     });
 
+    if (existing.type === "descriptive" && result.rubric === null) await scheduleAssignmentRubrics(existing.assignmentId);
     return result;
 };
 
@@ -534,12 +575,106 @@ const deleteQuestion = async (questionId: string, teacherId: string) => {
     });
 };
 
+// ── Copy the questions built in the assignment's working exam ───────────────
+// An assignment is built with the exam tools inside a hidden working exam (status UNSAVED). Publishing copies it
+// completely: each exam section becomes a block of the assignment, and every question keeps its order, code, tables,
+// pictures, topic, model answer and options exactly as set (correct answers and code options included). The working exam
+// is deleted afterwards. Questions the assignment already had are replaced, which is only allowed before any student
+// has started it.
+const copyQuestionsFromExam = async (assignmentId: string, examId: string, teacherId: string) => {
+    const canManageAssignment = await PermissionService.teacher.canManageAssignment(teacherId, assignmentId);
+    if (!canManageAssignment) throw ApiError.forbidden("You are not authorized to edit this assignment");
+    const canManageExam = await PermissionService.teacher.canManageExam(teacherId, examId);
+    if (!canManageExam) throw ApiError.forbidden("You are not authorized to use this exam");
+
+    const [exam] = await db.select().from(exams).where(eq(exams.id, examId));
+    if (!exam) throw ApiError.notFound("Exam not found");
+    // Only the hidden working copy is copied and deleted, never an exam the teacher saved.
+    if (exam.status !== "UNSAVED") throw ApiError.badRequest("Only an assignment's working exam can be copied into it");
+
+    const [started] = await db.select({ id: assignmentSubmissions.id }).from(assignmentSubmissions)
+        .where(eq(assignmentSubmissions.assignmentId, assignmentId)).limit(1);
+    if (started) throw ApiError.badRequest("Students have already started this assignment, so its questions can't be replaced");
+
+    // Same order as the exam editor shows: sections as stored, questions by their position in the section.
+    const examSections = await db.select().from(sections).where(eq(sections.examId, examId));
+    const copied = await Promise.all(examSections.map(async (section) => {
+        const sectionBlocks = await db.select().from(blocks).where(eq(blocks.sectionId, section.id)).orderBy(blocks.position);
+        const sectionQuestions = await db.select().from(questions).where(eq(questions.sectionId, section.id))
+            .orderBy(asc(questions.position), asc(questions.createdAt));
+        const withOptions = await Promise.all(sectionQuestions.map(async (question) => ({
+            question,
+            options: await db.select().from(options).where(eq(options.questionId, question.id)),
+        })));
+        return { section, sectionBlocks, questions: withOptions };
+    }));
+
+    const result = await db.transaction(async (tx) => {
+        await tx.delete(assignmentQuestions).where(eq(assignmentQuestions.assignmentId, assignmentId));
+        await tx.delete(blocks).where(eq(blocks.assignmentId, assignmentId));
+
+        let position = 0;
+        let totalMarks = 0;
+        let blockPosition = 0;
+        for (const { section, sectionBlocks, questions: sectionQuestions } of copied) {
+            if (sectionQuestions.length === 0) continue;
+            const sectionMarks = sectionQuestions.reduce((sum, { question }) => sum + (question.marks || 0), 0);
+            const [block] = await tx.insert(blocks).values({
+                assignmentId,
+                name: section.title,
+                subject: sectionBlocks[0]?.subject || section.title,
+                questionType: sectionQuestions.every(({ question }) => question.type === "descriptive") ? "descriptive" : "mcq",
+                questionCount: sectionQuestions.length,
+                totalMarks: sectionMarks,
+                instructions: sectionBlocks.flatMap((b) => b.instructions ?? []),
+                position: blockPosition++,
+            }).returning();
+            if (!block) throw ApiError.internal("Failed to create block");
+
+            for (const { question, options: questionOptions } of sectionQuestions) {
+                const [copy] = await tx.insert(assignmentQuestions).values({
+                    assignmentId,
+                    blockId: block.id,
+                    type: question.type,
+                    description: question.description,
+                    position: position++,
+                    images: question.images,
+                    contentBlocks: question.contentBlocks,
+                    topic: question.topic,
+                    subtopic: question.subtopic,
+                    marks: question.marks,
+                    modelAnswer: question.modelAnswer,
+                    rubric: question.rubric,
+                }).returning();
+                if (!copy) throw ApiError.internal("Failed to copy question");
+                if (questionOptions.length > 0) {
+                    await tx.insert(assignmentOptions).values(questionOptions.map((option) => ({
+                        questionId: copy.id,
+                        value: option.value,
+                        isCorrect: option.isCorrect,
+                        isCode: option.isCode,
+                    })));
+                }
+            }
+            totalMarks += sectionMarks;
+        }
+
+        await tx.update(assignments).set({ totalMarks, updatedAt: new Date() }).where(eq(assignments.id, assignmentId));
+        await tx.delete(exams).where(eq(exams.id, examId));
+        return { questionCount: position, totalMarks };
+    });
+    await scheduleAssignmentRubrics(assignmentId);
+    return result;
+};
+
 // ── Get Questions (teacher, full view incl. correct answers) ────────────────
 const getQuestionsForTeacher = async (assignmentId: string, teacherId: string) => {
     const hasAccess = await PermissionService.teacher.canManageAssignment(teacherId, assignmentId);
     if (!hasAccess) throw ApiError.forbidden("You are not authorized to view this assignment");
 
-    const questionsData = await db.select().from(assignmentQuestions).where(eq(assignmentQuestions.assignmentId, assignmentId));
+    const questionsData = await db.select().from(assignmentQuestions)
+        .where(eq(assignmentQuestions.assignmentId, assignmentId))
+        .orderBy(asc(assignmentQuestions.position), asc(assignmentQuestions.createdAt));
     return await Promise.all(questionsData.map(async (question) => {
         const optionsData = await db.select().from(assignmentOptions).where(eq(assignmentOptions.questionId, question.id));
         return { ...question, options: optionsData };
@@ -587,14 +722,20 @@ const getQuestionsForStudent = async (assignmentId: string, studentId: string) =
         type: assignmentQuestions.type,
         description: assignmentQuestions.description,
         images: assignmentQuestions.images,
+        contentBlocks: assignmentQuestions.contentBlocks,
         marks: assignmentQuestions.marks,
-    }).from(assignmentQuestions).where(eq(assignmentQuestions.assignmentId, assignmentId));
+        sectionTitle: blocks.name,
+    }).from(assignmentQuestions)
+        .leftJoin(blocks, eq(assignmentQuestions.blockId, blocks.id))
+        .where(eq(assignmentQuestions.assignmentId, assignmentId))
+        .orderBy(asc(assignmentQuestions.position), asc(assignmentQuestions.createdAt));
 
     return await Promise.all(questionsData.map(async (question) => {
         const optionsData = await db.select({
             id: assignmentOptions.id,
             questionId: assignmentOptions.questionId,
             value: assignmentOptions.value,
+            isCode: assignmentOptions.isCode,
         }).from(assignmentOptions).where(eq(assignmentOptions.questionId, question.id));
         return { ...question, options: optionsData };
     }));
@@ -717,6 +858,9 @@ const startAssignment = async (assignmentId: string, studentId: string) => {
     );
     if (existing) return existing;
 
+    const { dueDate } = await getComputedAssignmentDates(assignment, studentId);
+    if (dueDate && new Date() > dueDate) throw ApiError.badRequest(SUBMISSION_CLOSED_MESSAGE);
+
     const [submission] = await db.insert(assignmentSubmissions).values({
         assignmentId,
         studentId,
@@ -733,10 +877,10 @@ const saveAnswer = async (data: SaveAssignmentAnswerDto, studentId: string) => {
     if (!submission) throw ApiError.notFound("Submission not found");
     if (submission.studentId !== studentId) throw ApiError.forbidden("You are not authorized to answer for this submission");
     if (submission.status === "graded") throw ApiError.badRequest("This assignment has already been graded");
-    if (submission.status === "submitted") {
+    {
         const [assignment] = await db.select().from(assignments).where(eq(assignments.id, submission.assignmentId));
         const { dueDate } = assignment ? await getComputedAssignmentDates(assignment, studentId) : { dueDate: null };
-        if (dueDate && new Date() > dueDate) throw ApiError.badRequest("The due date has passed; you can no longer edit your submission");
+        if (dueDate && new Date() > dueDate) throw ApiError.badRequest(SUBMISSION_CLOSED_MESSAGE);
     }
 
     const [question] = await db.select().from(assignmentQuestions).where(eq(assignmentQuestions.id, data.questionId));
@@ -798,85 +942,122 @@ const getOrganisationIdForAssignmentSubmission = async (submissionId: string): P
     return classroom?.organisationId ?? null;
 };
 
-const runAssignmentAiEvaluation = async (submissionId: string) => {
-    try {
-        const submissionAnswersData = await db.select().from(assignmentAnswers).where(
-            eq(assignmentAnswers.submissionId, submissionId)
-        );
+// ── AI-grade an assignment submission's written answers (runs as a queued job, see workers.ts) ─────
+// Each answer is saved as soon as it is graded. A written answer with marks already (graded earlier in this same run that was
+// interrupted) is skipped, so a retry carries on where it stopped; a student editing an answer clears its marks, so edited
+// answers are graded again. If an answer fails this throws after saving the rest, and the job tries again.
+// Answers beyond what the organisation's plan covers are left for the teacher, with a note the student can read.
+const NOT_GRADED_NOTE = "This answer was not graded by AI because your organisation's plan has no AI grading left. Your teacher will grade it.";
+const NOT_GRADED_FAILED_NOTE = "This answer could not be graded automatically. Your teacher will grade it.";
 
-        const [submission] = await db.select().from(assignmentSubmissions).where(
-            eq(assignmentSubmissions.id, submissionId)
-        );
-        if (!submission) return;
+const saveAssignmentAnswer = async (answer: TextAnswer, result: EvaluationOutcome) => {
+    await db.update(assignmentAnswers)
+        .set({ marksAwarded: result.marksAwarded, feedback: result.feedback, updatedAt: new Date() })
+        .where(eq(assignmentAnswers.id, answer.answerId));
+};
 
-        const [assignment] = await db.select().from(assignments).where(
-            eq(assignments.id, submission.assignmentId)
-        );
-
-        const textAnswersToEvaluate: TextAnswer[] = [];
-
-        for (const answer of submissionAnswersData) {
-            const [question] = await db.select().from(assignmentQuestions).where(
-                eq(assignmentQuestions.id, answer.questionId)
-            );
-            if (!question) continue;
-
-            if (question.type === "descriptive") {
-                textAnswersToEvaluate.push({
-                    answerId: answer.id,
-                    questionId: question.id,
-                    question: question.description,
-                    modelAnswer: question.modelAnswer || "",
-                    studentAnswer: answer.textAnswer ?? "",
-                    maxMarks: question.marks,
-                    rubric: (question as any).rubric || null,
-                });
-            }
-        }
-
-        if (textAnswersToEvaluate.length > 0) {
-            for (const textAns of textAnswersToEvaluate) {
-                const { marksAwarded, feedback } = await evaluateAnswer(textAns);
-
-                await db.update(assignmentAnswers)
-                    .set({
-                        marksAwarded,
-                        feedback,
-                        updatedAt: new Date()
-                    })
-                    .where(eq(assignmentAnswers.id, textAns.answerId));
-            }
-
-            const organisationId = await getOrganisationIdForAssignmentSubmission(submissionId);
-            if (organisationId) {
-                try {
-                    await recordUsage(organisationId, "question_evaluation", textAnswersToEvaluate.length);
-                } catch (meterErr) {
-                    console.error(`[Billing] Failed to record assignment evaluation usage for org ${organisationId}:`, meterErr);
-                }
-            }
-        }
-
-        // Recalculate total marks awarded
-        const allAnswers = await db.select().from(assignmentAnswers).where(
-            eq(assignmentAnswers.submissionId, submissionId)
-        );
-        const totalMarksAwarded = allAnswers.reduce((sum, a) => sum + (a.marksAwarded ?? 0), 0);
-
-        await db.update(assignmentSubmissions)
-            .set({
-                status: "submitted",
-                totalMarksAwarded,
-                updatedAt: new Date()
-            })
-            .where(eq(assignmentSubmissions.id, submissionId));
-
-    } catch (e) {
-        console.error("Assignment background AI evaluation failed:", e);
-        await db.update(assignmentSubmissions)
-            .set({ status: "submitted", updatedAt: new Date() })
-            .where(eq(assignmentSubmissions.id, submissionId));
+const leaveAssignmentAnswersForTeacher = async (textAnswers: TextAnswer[], note: string) => {
+    for (const answer of textAnswers) {
+        await db.update(assignmentAnswers).set({ feedback: note, updatedAt: new Date() }).where(eq(assignmentAnswers.id, answer.answerId));
     }
+};
+
+const TEACHER_GRADES_NOTE = "Your teacher will grade this answer.";
+
+// Whether the teacher wants written answers graded by AI ("Evaluate with AI" on the publish step). MCQs never are.
+const assignmentAiEvaluationIsOn = async (assignmentId: string): Promise<boolean> => {
+    const [assignment] = await db.select({ aiEvaluation: assignments.aiEvaluation }).from(assignments).where(eq(assignments.id, assignmentId));
+    return assignment?.aiEvaluation !== false;
+};
+
+// Whether the written questions' grading guides are still being written. Answers are not graded until they are ready.
+const assignmentRubricsArePending = async (assignmentId: string): Promise<boolean> => {
+    const [assignment] = await db.select({ rubricStatus: assignments.rubricStatus }).from(assignments).where(eq(assignments.id, assignmentId));
+    return assignment?.rubricStatus === "pending";
+};
+
+// With AI evaluation off: an empty written answer gets 0 (no AI involved, as always), every other one waits for the teacher.
+const leaveWrittenAssignmentAnswersForTeacher = async (submissionId: string) => {
+    const pending = await buildAssignmentTextAnswers(submissionId);
+    await gradeAnswers(pending.filter((a) => isBlankAnswer(a.studentAnswer)), "marks_and_feedback", saveAssignmentAnswer);
+    await leaveAssignmentAnswersForTeacher(pending.filter((a) => !isBlankAnswer(a.studentAnswer)), TEACHER_GRADES_NOTE);
+};
+
+// The written answers of a submission that still have no marks.
+const buildAssignmentTextAnswers = async (submissionId: string): Promise<TextAnswer[]> => {
+    const submissionAnswers = await db.select().from(assignmentAnswers).where(eq(assignmentAnswers.submissionId, submissionId));
+    const questionIds = [...new Set(submissionAnswers.map((a) => a.questionId))];
+    const questionRows = questionIds.length > 0 ? await db.select().from(assignmentQuestions).where(inArray(assignmentQuestions.id, questionIds)) : [];
+    const questionById = new Map(questionRows.map((q) => [q.id, q]));
+
+    const textAnswers: TextAnswer[] = [];
+    for (const answer of submissionAnswers) {
+        const question = questionById.get(answer.questionId);
+        if (!question || question.type !== "descriptive" || answer.marksAwarded !== null) continue;
+        textAnswers.push({
+            answerId: answer.id,
+            questionId: question.id,
+            question: question.description,
+            contentBlocks: question.contentBlocks,
+            modelAnswer: question.modelAnswer || "",
+            studentAnswer: answer.textAnswer ?? "",
+            maxMarks: question.marks,
+            rubric: (question as any).rubric || null,
+        });
+    }
+    return textAnswers;
+};
+
+// Adds up the marks and marks the submission as done.
+const finishAssignmentSubmission = async (submissionId: string) => {
+    const allAnswers = await db.select().from(assignmentAnswers).where(eq(assignmentAnswers.submissionId, submissionId));
+    const totalMarksAwarded = allAnswers.reduce((sum, a) => sum + (a.marksAwarded ?? 0), 0);
+
+    await db.update(assignmentSubmissions)
+        .set({ status: "submitted", totalMarksAwarded, updatedAt: new Date() })
+        .where(eq(assignmentSubmissions.id, submissionId));
+};
+
+export const evaluateAssignmentSubmission = async (submissionId: string): Promise<void> => {
+    const [submission] = await db.select().from(assignmentSubmissions).where(eq(assignmentSubmissions.id, submissionId));
+    if (!submission) return;
+    // The AI calls below are logged against the assignment, its owner and organisation.
+    bindUsageContext(await assignmentUsageContext(submission.assignmentId));
+
+    // AI evaluation is off (or was turned off after this was queued): the teacher grades what is left.
+    if (!(await assignmentAiEvaluationIsOn(submission.assignmentId))) {
+        await leaveWrittenAssignmentAnswersForTeacher(submissionId);
+        await finishAssignmentSubmission(submissionId);
+        return;
+    }
+    // The grading guides are still being written: stay "evaluating". It is queued again as soon as they are ready
+    // (finishAssignmentRubrics), and the recovery sweep would also find it.
+    if (await assignmentRubricsArePending(submission.assignmentId)) return;
+
+    const textAnswers = await buildAssignmentTextAnswers(submissionId);
+    // An empty answer is marked 0 without any AI work, so it is neither charged nor held up by the plan.
+    const blanks = textAnswers.filter((a) => isBlankAnswer(a.studentAnswer));
+    const written = textAnswers.filter((a) => !isBlankAnswer(a.studentAnswer));
+    await gradeAnswers(blanks, "marks_and_feedback", saveAssignmentAnswer);
+
+    if (written.length > 0) {
+        const organisationId = await getOrganisationIdForAssignmentSubmission(submissionId);
+        const summary = await gradeAnswers(written, "marks_and_feedback", saveAssignmentAnswer, organisationId ? organisationGradeGate(organisationId) : undefined);
+        await leaveAssignmentAnswersForTeacher(summary.outOfQuota, NOT_GRADED_NOTE);
+        if (summary.failures.length > 0) {
+            await finishAssignmentSubmission(submissionId);
+            throw summary.failures[0];
+        }
+    }
+
+    await finishAssignmentSubmission(submissionId);
+};
+
+// Called when the grading job has used up all its tries: what could not be graded is left for the teacher with a note, and
+// the submission is finished, so a student is not left waiting on "evaluating".
+export const finalizeFailedAssignmentEvaluation = async (submissionId: string): Promise<void> => {
+    await leaveAssignmentAnswersForTeacher(await buildAssignmentTextAnswers(submissionId), NOT_GRADED_FAILED_NOTE);
+    await finishAssignmentSubmission(submissionId);
 };
 
 // ── Submit Assignment (finalize; grading of descriptive answers comes later) ─
@@ -890,14 +1071,9 @@ const submitAssignment = async (submissionId: string, studentId: string) => {
     const now = new Date();
     const { dueDate } = assignment ? await getComputedAssignmentDates(assignment, studentId) : { dueDate: null };
 
-    // Re-submitting an already-submitted assignment (editing an answer) is only
-    // allowed up until the due date; the first submission is always allowed
-    // (even late, tracked via isLate) so a student can't be locked out entirely.
-    if (submission.status === "submitted" && dueDate && now > dueDate) {
-        throw ApiError.badRequest("The due date has passed; you can no longer edit your submission");
-    }
-
-    const isLate = !!(dueDate && now > dueDate);
+    // Nothing is accepted after the due date: not a first submission, and not an edit of one already made.
+    if (dueDate && now > dueDate) throw ApiError.badRequest(SUBMISSION_CLOSED_MESSAGE);
+    const isLate = false;
 
     // Check if assignment has descriptive questions
     const questionsData = await db.select().from(assignmentQuestions).where(
@@ -905,22 +1081,30 @@ const submitAssignment = async (submissionId: string, studentId: string) => {
     );
     const hasDescriptive = questionsData.some(q => q.type === "descriptive");
 
-    const status = hasDescriptive ? "evaluating" : "submitted";
+    // Written answers go to the AI only when the teacher left AI evaluation on. Otherwise they wait for the teacher.
+    const queueEvaluation = hasDescriptive && (await assignmentAiEvaluationIsOn(submission.assignmentId));
+    const status = queueEvaluation ? "evaluating" : "submitted";
 
     const [updated] = await db.update(assignmentSubmissions)
         .set({ status, submittedAt: now, isLate, updatedAt: now })
         .where(eq(assignmentSubmissions.id, submissionId))
         .returning();
 
-    if (hasDescriptive) {
-        const descriptiveCount = questionsData.filter(q => q.type === "descriptive").length;
-        const organisationId = await getOrganisationIdForAssignmentSubmission(submissionId);
-        if (organisationId) {
-            await assertQuota(organisationId, "question_evaluation", descriptiveCount);
+    if (hasDescriptive && !queueEvaluation) {
+        await leaveWrittenAssignmentAnswersForTeacher(submissionId);
+        await finishAssignmentSubmission(submissionId);
+    }
+
+    // Checked after the status was saved: if the guides are still being written, the job that finishes them queues this
+    // submission, so nothing is lost either way.
+    if (queueEvaluation && !(await assignmentRubricsArePending(submission.assignmentId))) {
+        // The submission is already saved as "evaluating". If the queue cannot be reached right now, the student's submit
+        // still succeeded: the recovery sweep (workers.ts) queues it again within minutes.
+        try {
+            await enqueueEvaluation("evaluate-assignment", { submissionId });
+        } catch (err) {
+            console.error(`[Evaluation] Could not queue assignment submission ${submissionId}; the recovery sweep will pick it up:`, err);
         }
-        (async () => {
-            await runAssignmentAiEvaluation(submissionId);
-        })();
     }
 
     return updated;
@@ -1068,6 +1252,7 @@ export {
     deleteQuestion,
     getQuestionsForTeacher,
     getQuestionsForStudent,
+    copyQuestionsFromExam,
     getMyAssignments,
     startAssignment,
     saveAnswer,

@@ -16,6 +16,7 @@ import {
 } from "../question_review_ops.js";
 import type { Requester } from "../../../common/permissions/index.js";
 import { getClientForModel, toolCallParams } from "../../../common/agent/openai.client.js";
+import { streamChatCompletion, type StreamHooks } from "../../../common/agent/stream.js";
 import { restoreNullBackslashes } from "../question_cleanup.util.js";
 import { env } from "../../../env.js";
 import type { ConversationTurn } from "../Types/outputConversation.js";
@@ -36,7 +37,7 @@ export const tools = [
     zodFunction({
         name: "update_question",
         parameters: UpdateQuestionArgsZodSchema,
-        description: "Update one existing question: send its complete new version (text, content blocks, and all options + correct answer for an MCQ, or the full rubric for a descriptive question).",
+        description: "Update one existing question: send its complete new version (text, content blocks, and for an MCQ all options + the correct answer).",
     }),
     zodFunction({
         name: "update_question_options",
@@ -97,10 +98,8 @@ export interface QuestionReviewResult {
 const MAX_TOOL_ROUNDS = 5;
 
 /**
- * Text-chat turn for the Question Review Agent — the counterpart of the voice
- * session, for organisations whose plan has no voice agent. Identical
- * behaviour: same system prompt, same tools, same edits against the real
- * saved exam. Only the transport differs.
+ * Text-chat turn for the Question Review Agent: same system prompt, same tools, same edits against the real
+ * saved exam.
  *
  * Unlike the blueprint agent, this one has no in-memory state to thread
  * through: its tools write straight to the questions/options tables, so the
@@ -110,9 +109,10 @@ export async function questionReviewAgentTurn(
     examStructure: unknown,
     history: ConversationTurn[],
     userMessage: string,
-    requester: Requester
+    requester: Requester,
+    hooks?: StreamHooks
 ): Promise<QuestionReviewResult> {
-    const client = await getClientForModel(env.GENERATION_MODEL);
+    const client = await getClientForModel(env.GENERATION_MODEL, "question_review");
 
     const allChangeLog: string[] = [];
     let done = false;
@@ -128,16 +128,22 @@ export async function questionReviewAgentTurn(
     ];
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-        const response = await client.chat.completions.create({
-            model: env.GENERATION_MODEL,
-            messages,
-            tools,
-            tool_choice: "auto",
-            ...toolCallParams(env.GENERATION_MODEL),
-        });
+        // Streamed, so the teacher reads the reply as it is written. Tool calls are put together from the pieces they
+        // arrive in and then handled exactly as before.
+        const streamed = await streamChatCompletion(
+            client,
+            {
+                model: env.GENERATION_MODEL,
+                messages,
+                tools,
+                tool_choice: "auto",
+                ...toolCallParams(env.GENERATION_MODEL),
+            },
+            hooks
+        );
 
-        const choice = response.choices[0]?.message;
-        const toolCalls = choice?.tool_calls || [];
+        const choice = { content: streamed.content || null };
+        const toolCalls = streamed.toolCalls;
 
         if (toolCalls.length === 0) {
             return { message: choice?.content || "", done, changeLog: allChangeLog };

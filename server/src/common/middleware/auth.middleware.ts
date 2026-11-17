@@ -1,3 +1,4 @@
+import { runWithUsageContext } from "../agent/usage_context.js";
 import type { Request, Response, NextFunction } from "express";
 import { verifyAccessToken } from "../utils/jwt.utils.js";
 import { ApiError } from "../utils/ApiError.js";
@@ -56,7 +57,8 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
       organisationId: user.organisationId,
     };
 
-    next();
+    // Every AI call made while handling this request is logged for this person and organisation.
+    runWithUsageContext({ userId: user.id, organisationId: user.organisationId }, () => next());
   } catch (error) {
     // Pass errors to your global error handler (e.g. token expired errors)
     next(error);

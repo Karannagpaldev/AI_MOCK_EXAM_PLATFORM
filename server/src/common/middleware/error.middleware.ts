@@ -42,9 +42,10 @@ const errorHandler = (err: unknown, req: Request, res: Response, next: NextFunct
         fs.appendFileSync("error.log", new Date().toISOString() + " " + String(err instanceof Error ? err.stack : err) + "\n");
     } catch (e) {}
     
+    // The details (a failed database query, a stack trace) stay in the server log. The person only gets a short message.
     return res.status(500).json({
         success: false,
-        message: err instanceof Error ? err.message : "Something went wrong",
+        message: "Something went wrong on our side. Please try again in a moment.",
     });
 };
 

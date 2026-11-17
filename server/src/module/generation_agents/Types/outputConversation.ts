@@ -6,6 +6,9 @@ export const TopicSpecificInstructionZodSchema = z.object({
 });
 
 export const ConversationSummaryZodSchema = z.object({
+    // What the exam is for, in the teacher's words. Shapes which subtopics are picked and what each question asks.
+    // Empty when the teacher gave none. Summaries saved before this field existed don't have it at all.
+    goal: z.string().describe("The exam's goal in one sentence, in the teacher's terms. Empty string if none was given."),
     globalInstructions: z.array(z.string()).describe("Instructions that apply to the whole exam"),
     topicSpecificInstructions: z.array(TopicSpecificInstructionZodSchema).describe("Instructions grouped by the topic they apply to"),
 });

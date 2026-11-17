@@ -29,5 +29,16 @@ export const submissions = pgTable("submissions", {
     .where(sql`${table.deletedAt} is null`),
 ]);
 
+// A student who entered the join code of an exam that hasn't started yet. It lets the exam show up on their dashboard
+// (with its countdown and a Join button) so they don't have to type the code again. One row per student per exam.
+export const examRegistrations = pgTable("exam_registrations", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  userId: text("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  examId: text("exam_id").references(() => exams.id, { onDelete: "cascade" }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("exam_registrations_exam_user_idx").on(table.examId, table.userId),
+]);
+
 export type Submission = typeof submissions.$inferSelect;
 export type NewSubmission = typeof submissions.$inferInsert;

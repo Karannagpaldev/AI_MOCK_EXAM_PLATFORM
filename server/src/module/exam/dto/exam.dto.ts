@@ -17,7 +17,7 @@ export const createExamSchema = z.object({
   classroomId: z.string().min(1).optional(),
   groupId: z.string().min(1).optional(),
   publishTime: z.coerce.date().nullable().optional(),
-  status: z.enum(["DRAFT", "PUBLISHED"]).optional().default("DRAFT"),
+  status: z.enum(["DRAFT", "PUBLISHED", "UNSAVED"]).optional().default("DRAFT"),
   allowCoTeacherEdit: z.boolean().optional().default(false),
 }).refine(data => {
   if (data.type === "SCHEDULED") {
@@ -60,6 +60,8 @@ export const updateExamSchema = z.object({
   publishTime: z.coerce.date().nullable().optional(),
   status: z.enum(["DRAFT", "PUBLISHED"]).optional(),
   allowCoTeacherEdit: z.boolean().optional(),
+  evaluationScheme: z.string().trim().max(4000, { message: "The evaluation scheme cannot exceed 4000 characters" }).nullable().optional(),
+  aiEvaluation: z.boolean().optional(),
 }).refine(data => {
   if (data.type === "SCHEDULED" || (!data.type && data.startTime && data.endTime)) {
     if (data.startTime && data.endTime) {

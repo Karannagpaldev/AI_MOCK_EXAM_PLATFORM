@@ -33,11 +33,13 @@ export async function generateSectionSubtopics(
   context: {
     globalInstructions: string[];
     topicInstructions: TopicSpecificInstruction[];
+    // What the teacher wants the exam to test (from the Exam Intent chat). Decides what kind of knowledge each topic covers.
+    examGoal?: string | undefined;
     difficulty?: Difficulty | undefined;
     educationLevel?: EducationLevel | undefined;
   }
 ): Promise<SectionSubtopicsOutput> {
-  const client = await getClientForModel(env.GENERATION_MODEL);
+  const client = await getClientForModel(env.GENERATION_MODEL, "subtopics");
 
   const payload = {
     subject: section.subject,
@@ -47,6 +49,7 @@ export async function generateSectionSubtopics(
     topics: section.topics,
     difficulty: context.difficulty,
     education_level: context.educationLevel,
+    ...(context.examGoal ? { exam_goal: context.examGoal } : {}),
     global_instructions: context.globalInstructions,
     topic_specific_instructions: context.topicInstructions,
   };

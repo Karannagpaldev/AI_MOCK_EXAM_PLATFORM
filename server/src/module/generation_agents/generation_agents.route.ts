@@ -3,6 +3,7 @@ import {
     conversationTurnHandler,
     triggerBlueprintGenerationHandler,
     getBlueprintStatusHandler,
+    getConversationHandler,
     blueprintReviewTurnHandler,
     getBlueprintReviewHistoryHandler,
     rebalanceBlueprintHandler,
@@ -12,14 +13,6 @@ import {
     questionReviewTurnHandler,
     getQuestionReviewHistoryHandler,
 } from "./generation_agents.controller.js";
-import {
-    createRealtimeSessionHandler,
-    executeIntentRealtimeToolHandler,
-    executeReviewRealtimeToolHandler,
-    executeQuestionReviewRealtimeToolHandler,
-    logIntentTurnHandler,
-    logReviewTurnHandler,
-} from "./realtime_agents.controller.js";
 import { authenticate, authorize } from "../../common/middleware/auth.middleware.js";
 
 const router = Router();
@@ -46,6 +39,13 @@ router.post(
 );
 
 router.get(
+    "/conversation/:sessionId",
+    authenticate,
+    authorize("system_admin", "teacher", "manager"),
+    getConversationHandler
+);
+
+router.get(
     "/blueprint/:sessionId",
     authenticate,
     authorize("system_admin", "teacher", "manager"),
@@ -66,7 +66,7 @@ router.get(
     getBlueprintReviewHistoryHandler
 );
 
-// Text counterpart of /realtime/question-review/tool, for plans without voice.
+// One turn of the question review chat.
 router.post(
     "/question-review/turn",
     authenticate,
@@ -100,48 +100,6 @@ router.post(
     authenticate,
     authorize("system_admin", "teacher", "manager"),
     generateTopicQuestionsHandler
-);
-
-router.post(
-    "/realtime/session",
-    authenticate,
-    authorize("system_admin", "teacher", "manager"),
-    createRealtimeSessionHandler
-);
-
-router.post(
-    "/realtime/intent/tool",
-    authenticate,
-    authorize("system_admin", "teacher", "manager"),
-    executeIntentRealtimeToolHandler
-);
-
-router.post(
-    "/realtime/review/tool",
-    authenticate,
-    authorize("system_admin", "teacher", "manager"),
-    executeReviewRealtimeToolHandler
-);
-
-router.post(
-    "/realtime/question-review/tool",
-    authenticate,
-    authorize("system_admin", "teacher", "manager"),
-    executeQuestionReviewRealtimeToolHandler
-);
-
-router.post(
-    "/realtime/intent/log",
-    authenticate,
-    authorize("system_admin", "teacher", "manager"),
-    logIntentTurnHandler
-);
-
-router.post(
-    "/realtime/review/log",
-    authenticate,
-    authorize("system_admin", "teacher", "manager"),
-    logReviewTurnHandler
 );
 
 export const generationAgentsRouter = router;

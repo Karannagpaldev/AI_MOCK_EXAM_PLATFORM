@@ -1,18 +1,15 @@
 import { z } from "zod";
-
-export const RubricCategoryInputZodSchema = z.object({
-    name: z.string(),
-    weight: z.number(),
-    key_points: z.array(z.string()),
-});
+import { TableCellZodSchema } from "../table_blocks.util.js";
 
 // Same three shapes as the generation agent's output (outputGeneration.ts) —
 // kept as a separate definition (this agent has its own independent tool
 // schemas) but must stay structurally compatible with question.schema.ts's
 // QuestionContentBlock, since both end up in the same DB column.
-export const ContentBlockInputZodSchema = z.discriminatedUnion("type", [
+export const ContentBlockInputZodSchema = z.union([
     z.object({ type: z.literal("code"), language: z.string(), code: z.string() }),
-    z.object({ type: z.literal("table"), headers: z.array(z.string()), rows: z.array(z.array(z.string())) }),
+    z.object({ type: z.literal("table"), headers: z.array(TableCellZodSchema), rows: z.array(z.array(TableCellZodSchema)) }),
+    z.object({ type: z.literal("list"), text: z.string() }),
+    // Lists saved before lists were written as text; they have to be copied back unchanged.
     z.object({ type: z.literal("list"), ordered: z.boolean(), items: z.array(z.string()) }),
 ]);
 
@@ -27,8 +24,8 @@ export const OptionInputZodSchema = z.object({
 // the agent as context; question_id comes from the current question list.
 
 // Manual: the teacher dictates the exact question — no LLM call, just record
-// it. Exactly one of (options + correct_option) or (rubric_categories) must
-// be provided depending on `type`; the other pair is null.
+// it. For an MCQ, options + correct_option are required; for a descriptive
+// question they are null (its grading guide is written later, not here).
 export const AddQuestionArgsZodSchema = z.object({
     section_id: z.string().describe("The id of the exam section this question belongs to"),
     block_id: z.string().nullable().describe("The id of the block this question belongs to, if the section has blocks — null otherwise"),
@@ -37,10 +34,6 @@ export const AddQuestionArgsZodSchema = z.object({
     marks: z.number().min(0.5).describe("Marks for this question"),
     options: z.array(OptionInputZodSchema).nullable().describe("Exactly 4 options — required (non-null) when type is mcq, null when descriptive"),
     correct_option: z.enum(["A", "B", "C", "D"]).nullable().describe("Required (non-null) when type is mcq, null when descriptive"),
-    rubric_categories: z
-        .array(RubricCategoryInputZodSchema)
-        .nullable()
-        .describe("Required (non-null) when type is descriptive, null when mcq"),
     content_blocks: z
         .array(ContentBlockInputZodSchema)
         .describe("Code/table/list content the teacher dictated alongside the question. Empty array when there is none — most questions have none."),
@@ -81,8 +74,8 @@ export const RemoveQuestionArgsZodSchema = z.object({
     question_id: z.string().describe("The id of the question to remove, from the current question list"),
 });
 
-// Always the COMPLETE edited question — text, content blocks, and options or
-// rubric together — so the parts can never drift out of sync, and an MCQ's
+// Always the COMPLETE edited question — text, content blocks, and options
+// (MCQ) together — so the parts can never drift out of sync, and an MCQ's
 // whole new version is fact-checked before it's saved.
 export const UpdateQuestionArgsZodSchema = z.object({
     question_id: z.string().describe("The id of the question to update"),
@@ -95,10 +88,6 @@ export const UpdateQuestionArgsZodSchema = z.object({
         .nullable()
         .describe("MCQ: all 4 options after the edit, unchanged ones copied back exactly. null for a descriptive question."),
     correct_option: z.enum(["A", "B", "C", "D"]).nullable().describe("MCQ: the correct option after the edit. null for a descriptive question."),
-    rubric_categories: z
-        .array(RubricCategoryInputZodSchema)
-        .nullable()
-        .describe("Descriptive: the full rubric after the edit, matching the new wording. null for an MCQ."),
 });
 
 export const UpdateQuestionOptionsArgsZodSchema = z.object({

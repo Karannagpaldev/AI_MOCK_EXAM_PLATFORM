@@ -9,12 +9,15 @@ import {
     setDocumentVisibilityHandler,
     deleteDocumentHandler,
     generateFromDocumentsHandler,
+    listTopicsHandler,
     searchQuestionBankHandler,
+    getPaperTopicsHandler,
+    pickQuestionsHandler,
 } from "./question_bank.controller.js";
 
 const pdfUpload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 30 * 1024 * 1024 },
+    limits: { fileSize: 20 * 1024 * 1024 },
     fileFilter: (req, file, cb) => {
         if (file.mimetype === "application/pdf") cb(null, true);
         else cb(new Error("Only PDF files are allowed"));
@@ -66,11 +69,32 @@ router.delete(
     deleteDocumentHandler
 );
 
+router.get(
+    "/topics",
+    authenticate,
+    authorize("system_admin", "teacher", "manager"),
+    listTopicsHandler
+);
+
 router.post(
     "/generate",
     authenticate,
     authorize("system_admin", "teacher", "manager"),
     generateFromDocumentsHandler
+);
+
+router.get(
+    "/documents/:documentId/topics",
+    authenticate,
+    authorize("system_admin", "teacher", "manager"),
+    getPaperTopicsHandler
+);
+
+router.post(
+    "/pick",
+    authenticate,
+    authorize("system_admin", "teacher", "manager"),
+    pickQuestionsHandler
 );
 
 router.post(

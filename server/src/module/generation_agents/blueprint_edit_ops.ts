@@ -20,6 +20,7 @@ export interface SectionContext {
     difficulty?: Difficulty | undefined;
     educationLevel?: EducationLevel | undefined;
     globalInstructions: string[];
+    examGoal?: string | undefined;
     targetQuestionCount: number;
 }
 
@@ -185,6 +186,7 @@ export async function applyAddTopic(section: ExamBlueprintSection, args: AddTopi
             {
                 globalInstructions: context.globalInstructions,
                 topicInstructions: [],
+                examGoal: context.examGoal,
                 difficulty: context.difficulty,
                 educationLevel: context.educationLevel,
             }

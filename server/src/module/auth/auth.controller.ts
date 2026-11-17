@@ -7,13 +7,22 @@ export const register = async (req: Request, res: Response) => {
     return ApiResponse.ok(res, "User registered successfully", result);
 };
 
+// The sign-in cookie. Deployed it is secure and cross-site. While developing, the site (localhost:3000) and the API
+// (127.0.0.1:8000) count as different sites, so on this computer it must still be secure + cross-site (browsers allow that
+// on localhost). A phone reaching the API by the home-network address (192.168.x.x over plain http) cannot keep a secure
+// cookie, so there it is not secure and uses "lax" (the site and the API share that address).
+const LOCAL_HOSTS = ["localhost", "127.0.0.1", "::1", "[::1]"];
+
+const refreshCookieOptions = (req: Request) => {
+    const crossSite = process.env.NODE_ENV === "production" || LOCAL_HOSTS.includes(req.hostname);
+    return { httpOnly: true, secure: crossSite, sameSite: (crossSite ? "none" : "lax") as "none" | "lax" };
+};
+
 export const login = async (req: Request, res: Response) => {
     const result = await authService.login(req.body)
 
     res.cookie("refreshToken", result.refreshToken, {
-        httpOnly: true,
-        secure: true,
-        sameSite: "none",  // ← change this
+        ...refreshCookieOptions(req),
         maxAge: 7 * 24 * 60 * 60 * 1000
     })
     return ApiResponse.ok(res, "User logged in successfully", { accessToken: result.accessToken, user: result.safeUser })
@@ -21,11 +30,9 @@ export const login = async (req: Request, res: Response) => {
 export const logout = async (req: Request, res: Response) => {
     const result = await authService.logout(req.user!.id)
 
-    res.clearCookie("refreshToken", {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "strict",
-    });
+    // Must match the attributes the cookie was set with (see login). A browser ignores a "strict" cookie sent in a reply
+    // to a request from another site, so with the site and the API on different domains this would not log anyone out.
+    res.clearCookie("refreshToken", refreshCookieOptions(req));
     return ApiResponse.ok(res, "User logged out successfully", result)
 }
 

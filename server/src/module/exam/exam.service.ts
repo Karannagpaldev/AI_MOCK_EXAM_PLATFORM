@@ -1,10 +1,11 @@
-import { eq, and, count, inArray, avg, desc, ilike, gte, or, isNull, lte, sql } from "drizzle-orm";
+import { eq, ne, and, count, inArray, avg, desc, ilike, gte, or, isNull, lte, sql } from "drizzle-orm";
 import db from "../../common/db/index.js";
 import { exams, sections, questions, options, groups, classroomStudents, groupStudents, blocks, users } from "../../common/db/schema.js";
 import { submissions } from "../submissions/submission.schema.js";
 import { ApiError } from "../../common/utils/ApiError.js";
 import type { CreateExamDto, UpdateExamDto } from "./dto/exam.dto.js";
 import { PermissionService } from "../../common/permissions/index.js";
+import { scheduleRubrics } from "../rubrics/rubric.service.js";
 
 
 
@@ -124,6 +125,12 @@ const saveGeneratedExam = async (data: any, requester: Requester) => {
             }
         }
 
+        // The past papers these questions were taken from, sent by the past-paper flow. Kept on the exam (added to any
+        // it already has), so adding a topic later can offer those papers' topics.
+        const sourceDocumentIds: string[] = Array.isArray(data.sourceDocumentIds)
+            ? [...new Set<string>(data.sourceDocumentIds.filter((id: unknown): id is string => typeof id === "string" && id.length > 0))]
+            : [];
+
         let examId = data.examId;
         let exam;
 
@@ -142,6 +149,9 @@ const saveGeneratedExam = async (data: any, requester: Requester) => {
                 .set({
                     totalMarks: calculatedTotalMarks,
                     status: data.status || existingExam.status,
+                    ...(sourceDocumentIds.length > 0
+                        ? { sourceDocumentIds: [...new Set([...(existingExam.sourceDocumentIds ?? []), ...sourceDocumentIds])] }
+                        : {}),
                     updatedAt: new Date()
                 })
                 .where(eq(exams.id, examId))
@@ -169,6 +179,7 @@ const saveGeneratedExam = async (data: any, requester: Requester) => {
                 classroomId: data.classroomId ?? null,
                 groupId: data.groupId ?? null,
                 status: data.status || "DRAFT",
+                sourceDocumentIds: sourceDocumentIds.length > 0 ? sourceDocumentIds : null,
             }).returning();
             exam = newExam;
         }
@@ -243,6 +254,8 @@ const saveGeneratedExam = async (data: any, requester: Requester) => {
                             marks: qData.marks,
                             position: nextPosition++,
                             rubric: qData.rubric || null,
+                            topic: qData.topic ?? null,
+                            subtopic: qData.subtopic ?? null,
                             contentBlocks: qData.contentBlocks || qData.content_blocks || [],
                         }).returning();
 
@@ -270,6 +283,8 @@ const saveGeneratedExam = async (data: any, requester: Requester) => {
                         marks: qData.marks,
                         position: nextPosition++,
                         rubric: qData.rubric || null,
+                        topic: qData.topic ?? null,
+                        subtopic: qData.subtopic ?? null,
                         contentBlocks: qData.contentBlocks || qData.content_blocks || [],
                     }).returning();
 
@@ -308,7 +323,7 @@ const saveGeneratedExam = async (data: any, requester: Requester) => {
 
 // ── Get All Exams (teacher sees only his own) ──────────────────────────────────
 const getExams = async (teacherId: string, search?: string, days?: string, page: number = 1, limit: number = 10) => {
-    const conditions = [eq(exams.createdBy, teacherId)];
+    const conditions = [eq(exams.createdBy, teacherId), ne(exams.status, "UNSAVED")];
 
     if (search) {
         conditions.push(ilike(exams.title, `%${search}%`));
@@ -354,7 +369,7 @@ const listExamsForClassroom = async (classroomId: string, requester: Requester, 
         : await PermissionService.teacher.canManageClassroom(requester.id, classroomId);
     if (!canManageClassroom) throw ApiError.forbidden("You are not authorized to view this classroom's exams");
 
-    const baseConditions = [eq(exams.classroomId, classroomId)];
+    const baseConditions = [eq(exams.classroomId, classroomId), ne(exams.status, "UNSAVED")];
     if (groupId) baseConditions.push(eq(exams.groupId, groupId));
     if (search) baseConditions.push(ilike(exams.title, `%${search}%`));
 
@@ -435,6 +450,13 @@ const updateExam = async (examId: string, data: UpdateExamDto, requester: Reques
         .where(eq(exams.id, examId))
         .returning();
 
+    // The grading guides of the written questions are written in the background: for an exam that has just been saved from
+    // the builder (its questions have none yet), and again from scratch when the teacher changes the evaluation scheme.
+    if (updated) {
+        const schemeChanged = data.evaluationScheme !== undefined && (data.evaluationScheme ?? null) !== (existing.evaluationScheme ?? null);
+        await scheduleRubrics(examId, { regenerateAll: schemeChanged });
+    }
+
     return updated;
 };
 
@@ -446,10 +468,10 @@ const deleteExam = async (examId: string, requester: Requester) => {
 
 // ── Get Overview Stats ─────────────────────────────────────────────────────────
 const getOverviewStats = async (teacherId: string) => {
-    const [examsCount] = await db.select({ value: count() }).from(exams).where(eq(exams.createdBy, teacherId));
+    const [examsCount] = await db.select({ value: count() }).from(exams).where(and(eq(exams.createdBy, teacherId), ne(exams.status, "UNSAVED")));
 
     const recentExams = await db.select().from(exams)
-        .where(eq(exams.createdBy, teacherId))
+        .where(and(eq(exams.createdBy, teacherId), ne(exams.status, "UNSAVED")))
         .orderBy(desc(exams.createdAt))
         .limit(5);
 

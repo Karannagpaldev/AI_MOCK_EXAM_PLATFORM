@@ -25,7 +25,7 @@ export const assignManagerSchema = z.object({
     email: z.string({ message: "Email is required" }).email("Invalid email address").toLowerCase(),
 });
 
-export const assignTeacherSchema = z.object({
+export const inviteTeacherSchema = z.object({
     email: z.string({ message: "Email is required" }).email("Invalid email address").toLowerCase(),
 });
 
@@ -38,5 +38,5 @@ export type CreateOrganisationDto = z.infer<typeof createOrganisationSchema>;
 export type UpdateOrganisationDto = z.infer<typeof updateOrganisationSchema>;
 export type AssignUserDto = z.infer<typeof assignUserSchema>;
 export type AssignManagerDto = z.infer<typeof assignManagerSchema>;
-export type AssignTeacherDto = z.infer<typeof assignTeacherSchema>;
+export type InviteTeacherDto = z.infer<typeof inviteTeacherSchema>;
 export type JoinOrganisationDto = z.infer<typeof joinOrganisationSchema>;

@@ -50,6 +50,11 @@ export const deleteSubmission = async (req: Request, res: Response) => {
     return ApiResponse.ok(res, "Submission deleted successfully", null);
 };
 
+export const getUpcomingExams = async (req: Request, res: Response) => {
+    const result = await submissionsService.getUpcomingExams(req.user!.id);
+    return ApiResponse.ok(res, "Upcoming exams fetched", result);
+};
+
 export const getMySubmissions = async (req: Request, res: Response) => {
     const mode = (req.query.mode as string) || "simple";
     const { search, days, page, limit } = req.query;

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TableCellZodSchema } from "../table_blocks.util.js";
 
 // Supplementary content shown between the question text and its options — a
 // code listing, a table, or a list. See question.schema.ts's
@@ -13,14 +14,13 @@ const CodeContentBlockZodSchema = z.object({
 
 const TableContentBlockZodSchema = z.object({
     type: z.literal("table"),
-    headers: z.array(z.string()),
-    rows: z.array(z.array(z.string())).describe("Every row must have exactly as many cells as there are headers."),
+    headers: z.array(TableCellZodSchema),
+    rows: z.array(z.array(TableCellZodSchema)).describe("Each row lists only the cells that start in it. Counting merged cells, every row fills exactly as many columns as the headers have."),
 });
 
 const ListContentBlockZodSchema = z.object({
     type: z.literal("list"),
-    ordered: z.boolean().describe("true only when sequence/order matters (steps, rankings); false otherwise."),
-    items: z.array(z.string()),
+    text: z.string().describe('The list as plain text, one item per line: "- " starts a bullet, "1. " a numbered item, and a sub-item is indented 4 spaces under its parent. No blank lines.'),
 });
 
 const QuestionContentBlockZodSchema = z.discriminatedUnion("type", [
@@ -51,17 +51,10 @@ const MCQQuestionZodSchema = z.object({
     correct_option: z.enum(["A", "B", "C", "D"]).describe("The correct option key (A, B, C, or D)"),
 });
 
-const RubricCategoryZodSchema = z.object({
-    name: z.string().describe("The name of the category (e.g. Definition, Concept Knowledge, Example, Correct Application, Depth of Reasoning)"),
-    weight: z.number().describe("The weight of this category (float between 0 and 1); all categories for a question sum to 1"),
-    key_points: z.array(z.string()).describe("Key points expected for this category"),
-});
-
 const DescriptiveQuestionZodSchema = z.object({
     ...baseQuestionFields,
     type: z.literal("descriptive"),
     question_text: z.string().describe("The text of the descriptive question"),
-    rubric: z.object({ categories: z.array(RubricCategoryZodSchema) }).describe("The grading rubric for this question"),
 });
 
 // Raw model output — one call's worth of questions for a single topic. Marks

@@ -12,6 +12,7 @@ import {
 import type { IInputExam } from "../Types/inputExam.js";
 import { searchMemories, addMemories } from "../../../common/utils/mem0.js";
 import { getExamIntentSystemPrompt, getExamIntentConcludeInstruction } from "../../../prompts/exam_intent_agent.prompt.js";
+import { createMessageFieldExtractor, type StreamHooks } from "../../../common/agent/stream.js";
 
 const topicName = (t: IInputExam["sections"][number]["topics"][number]): string =>
   typeof t === "string" ? t : t.topic;
@@ -46,9 +47,7 @@ function summaryToMemoryMessages(summary: ConversationSummary): { role: "user"; 
   return lines.map((content) => ({ role: "user" as const, content }));
 }
 
-// Teaches mem0 what was learned once a summary is final — shared by the text
-// turn flow below and the realtime voice flow (Realtime.ts), which produces
-// the same ConversationSummary via a tool call instead of response_format.
+// Teaches mem0 what was learned once a summary is final.
 export function persistIntentMemories(summary: ConversationSummary, examTitle: string | undefined, userId: string): void {
   void addMemories(summaryToMemoryMessages(summary), userId, {
     source: "exam-intent-agent",
@@ -78,22 +77,55 @@ async function buildMessages(examInput: IInputExam, history: ConversationTurn[],
 // (evaluateSingleAnswer, generateTopicQuestions): the model occasionally
 // returns a malformed/empty object, and without a retry that was an
 // unhandled ZodError reaching the teacher as a raw, unreadable message.
-async function callStructured<T extends z.ZodTypeAny>(messages: ChatMessage[], schema: T, name: string): Promise<z.infer<T>> {
-  const client = await getClientForModel(env.GENERATION_MODEL);
+// With `stream`, the "message" text of the reply is passed on as it is written. `holdWhenDone` keeps back a reply that
+// says it is finished, for a caller that may replace that message.
+async function callStructured<T extends z.ZodTypeAny>(
+  messages: ChatMessage[],
+  schema: T,
+  name: string,
+  stream?: StreamHooks & { holdWhenDone?: boolean }
+): Promise<z.infer<T>> {
+  const client = await getClientForModel(env.INTENT_MODEL, "exam_intent");
   const MAX_ATTEMPTS = 3;
   let lastError: unknown;
 
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     try {
-      const response = await client.chat.completions.create({
-        model: env.GENERATION_MODEL,
-        messages,
-        response_format: zodResponseFormat(schema, name),
-      });
-      const content = response.choices[0]?.message.content || "{}";
-      return schema.parse(JSON.parse(content));
+      let content: string;
+      if (stream?.onText) {
+        const extractor = createMessageFieldExtractor({
+          onText: stream.onText,
+          ...(stream.onReset ? { onReset: stream.onReset } : {}),
+          holdWhenDone: stream.holdWhenDone ?? false,
+        });
+        const response: any = await client.chat.completions.create({
+          model: env.INTENT_MODEL,
+          messages,
+          response_format: zodResponseFormat(schema, name),
+          stream: true,
+        });
+        content = "";
+        for await (const chunk of response) {
+          const piece = chunk.choices?.[0]?.delta?.content;
+          if (piece) {
+            content += piece;
+            extractor.push(piece);
+          }
+        }
+        extractor.end();
+      } else {
+        const response = await client.chat.completions.create({
+          model: env.INTENT_MODEL,
+          messages,
+          response_format: zodResponseFormat(schema, name),
+        });
+        content = response.choices[0]?.message.content || "{}";
+      }
+      return schema.parse(JSON.parse(content || "{}"));
     } catch (err) {
       lastError = err;
+      // Whatever was already shown belongs to the failed attempt, so it is dropped before the next one starts.
+      stream?.onReset?.();
       console.warn(
         `[exam-intent-agent] attempt ${attempt + 1}/${MAX_ATTEMPTS} produced an invalid response, ${attempt + 1 < MAX_ATTEMPTS ? "retrying" : "giving up"}:`,
         err instanceof Error ? err.message : err
@@ -126,10 +158,17 @@ export async function concludeExamIntent(
 export async function examIntentAgentTurn(
   examInput: IInputExam,
   history: ConversationTurn[],
-  userId?: string | null
+  userId?: string | null,
+  hooks?: StreamHooks
 ) {
   const messages = await buildMessages(examInput, history, userId);
-  let result: ExamIntentAgentOutput = await callStructured(messages, ExamIntentAgentOutputZodSchema, "exam_intent_agent_output");
+  // On the first turn a reply that says "done" is swapped for a question (below), so it is never streamed.
+  let result: ExamIntentAgentOutput = await callStructured(
+    messages,
+    ExamIntentAgentOutputZodSchema,
+    "exam_intent_agent_output",
+    hooks ? { ...hooks, holdWhenDone: history.length === 0 } : undefined
+  );
 
   // Hard guarantee, independent of prompt adherence: never let the very
   // first turn conclude with zero questions asked. Memory can make the model
@@ -139,7 +178,7 @@ export async function examIntentAgentTurn(
   if (history.length === 0 && result.done) {
     result = {
       done: false,
-      message: "Before finalizing the plan, what type of questions would you like for this exam — and is there a difficulty level or topic emphasis you'd like to go with?",
+      message: "What's the goal of this exam? For example, checking fundamentals, testing problem-solving, or practical skills.",
       summary: null,
     };
   }

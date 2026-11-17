@@ -17,6 +17,7 @@ import type { ExamBlueprintSection, TopicWithSubtopics } from "../Types/outputSu
 import type { GeneratedTopicQuestions } from "../Types/outputGeneration.js";
 import type { TopicInput } from "../Types/inputExam.js";
 import { generateBookSectionSubtopics, loadSourceMaterial, matchSubtopicsToBook } from "../../books/book_retrieval.js";
+import { bindUsageContext, withUsageSteps } from "../../../common/agent/usage_context.js";
 
 const topicName = (t: TopicInput): string => (typeof t === "string" ? t : t.topic);
 
@@ -55,6 +56,13 @@ export const generateBlueprintFunction = inngest.createFunction(
     },
     async ({ event, step }) => {
         const sessionId = event.data.sessionId as string;
+        // The AI work below is logged against the teacher this session belongs to, and their organisation.
+        const owner = await getSession(sessionId);
+        if (owner) {
+            const usage = { userId: owner.createdBy, organisationId: owner.organisationId };
+            bindUsageContext(usage);
+            step = withUsageSteps(step, usage);
+        }
 
         try {
             const session = await step.run("load-session", async () => {
@@ -106,6 +114,7 @@ export const generateBlueprintFunction = inngest.createFunction(
                     return generateSectionSubtopics(section, {
                         globalInstructions: summary.globalInstructions,
                         topicInstructions,
+                        examGoal: summary.goal,
                         difficulty: examInput.difficulty,
                         educationLevel: examInput.educationLevel,
                     });
@@ -170,6 +179,13 @@ export const generateQuestionsFunction = inngest.createFunction(
     },
     async ({ event, step }) => {
         const sessionId = event.data.sessionId as string;
+        // The AI work below is logged against the teacher this session belongs to, and their organisation.
+        const owner = await getSession(sessionId);
+        if (owner) {
+            const usage = { userId: owner.createdBy, organisationId: owner.organisationId };
+            bindUsageContext(usage);
+            step = withUsageSteps(step, usage);
+        }
 
         try {
             const session = await step.run("load-session-for-questions", async () => {
@@ -220,6 +236,7 @@ export const generateQuestionsFunction = inngest.createFunction(
                                     difficulty: examInput.difficulty,
                                     educationLevel: examInput.educationLevel,
                                     topic: topic.topic,
+                                    examGoal: summary.goal,
                                     subtopics: activeSubtopics.map((s) => ({ name: s.name, count: s.allocatedQuestions })),
                                     globalInstructions: summary.globalInstructions,
                                     topicInstructions,
